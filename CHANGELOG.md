@@ -19,6 +19,12 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.12] - 2026-08-10
+
+### Fixed
+- Fixed detailed report normalization so per-question sections are preserved when the LLM returns question blocks in reverse or otherwise non-ascending order.
+- Fixed detailed report parsing/transcript insertion to support variable section heading styles (including markdown headings like `##`/`###` and bold headings) instead of assuming one strict format.
+
 ## [1.10.11] - 2026-08-08
 
 ### Added
