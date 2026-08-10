@@ -2982,17 +2982,24 @@ function App() {
             return questionBlockMarkdown
         }
 
+        const isSectionHeadingLine = (line) => {
+            const trimmed = String(line || '').trim()
+            if (!trimmed) return false
+            if (/^\*\*[^*\n]+\*\*\s*$/i.test(trimmed)) return true
+            return /^#{2,6}\s+[^#\n].*$/i.test(trimmed)
+        }
+
         const lines = questionBlockMarkdown.split('\n')
-        const firstBoldedHeadingIndex = lines.findIndex(
-            (line, index) => index > 0 && /^\s*\*\*[^*\n]+\*\*\s*$/.test(line.trim()),
+        const firstSectionHeadingIndex = lines.findIndex(
+            (line, index) => index > 0 && isSectionHeadingLine(line),
         )
-        if (firstBoldedHeadingIndex < 0) {
+        if (firstSectionHeadingIndex < 0) {
             return questionBlockMarkdown
         }
 
         let insertAt = lines.length
-        for (let index = firstBoldedHeadingIndex + 1; index < lines.length; index += 1) {
-            if (/^\s*\*\*[^*\n]+\*\*\s*$/.test(lines[index].trim())) {
+        for (let index = firstSectionHeadingIndex + 1; index < lines.length; index += 1) {
+            if (isSectionHeadingLine(lines[index])) {
                 insertAt = index
                 break
             }
@@ -3007,21 +3014,53 @@ function App() {
 
     function normalizeDetailedReportMarkdownForPdf(detailedMarkdown, summaries) {
         const normalizedMarkdown = String(detailedMarkdown || '').replace(/\r\n?/g, '\n')
-        const questionBlockPattern =
-            /^###\s*Question\s+(\d+)\s*:[^\n]*\n[\s\S]*?(?=^###\s*Question\s+\d+\s*:|$)/gm
+        const questionHeadingPattern =
+            /^((?:#{1,6})\s*Question\s+(\d+)\b[^\n]*|\*\*\s*Question\s+(\d+)\b[^*\n]*\*\*)\s*$/gim
 
         const extractedBlocks = []
-        let match
-        while ((match = questionBlockPattern.exec(normalizedMarkdown)) !== null) {
-            const questionNumber = Number.parseInt(match[1], 10)
-            const blockText = match[0]
-            const headingText =
-                blockText.match(/^###\s*Question\s+\d+\s*:\s*(.*)$/m)?.[1]?.trim() || ''
+        const headingMatches = []
+        let headingMatch
+
+        while ((headingMatch = questionHeadingPattern.exec(normalizedMarkdown)) !== null) {
+            const headingLine = String(headingMatch[1] || '').trim()
+            const questionNumber = Number.parseInt(headingMatch[2] || headingMatch[3], 10)
+            if (!Number.isInteger(questionNumber) || questionNumber <= 0) {
+                continue
+            }
+
+            headingMatches.push({
+                questionNumber,
+                start: headingMatch.index,
+                end: headingMatch.index + headingLine.length,
+                headingLine,
+            })
+        }
+
+        for (let index = 0; index < headingMatches.length; index += 1) {
+            const current = headingMatches[index]
+            const next = headingMatches[index + 1]
+            const blockStart = current.start
+            const blockEnd = next ? next.start : normalizedMarkdown.length
+            const rawBlockText = normalizedMarkdown.slice(blockStart, blockEnd).trimEnd()
+
+            const headingText = current.headingLine
+                .replace(/^(?:#{1,6})\s*Question\s+\d+\s*[:\-]?\s*/i, '')
+                .replace(/^\*\*\s*Question\s+\d+\s*[:\-]?\s*/i, '')
+                .replace(/\*\*\s*$/i, '')
+                .trim()
+
+            const canonicalHeading = headingText
+                ? `### Question ${current.questionNumber}: ${headingText}`
+                : `### Question ${current.questionNumber}`
+
+            const rawBlockLines = rawBlockText.split('\n')
+            rawBlockLines[0] = canonicalHeading
+            const blockText = rawBlockLines.join('\n')
 
             extractedBlocks.push({
-                start: match.index,
-                end: match.index + blockText.length,
-                questionNumber,
+                start: blockStart,
+                end: blockEnd,
+                questionNumber: current.questionNumber,
                 headingText,
                 blockText,
             })
@@ -3030,11 +3069,12 @@ function App() {
         if (!extractedBlocks.length) return normalizedMarkdown
 
         const questionOrder = extractedBlocks.map((block) => block.questionNumber)
-        const isStrictlyDescending =
-            questionOrder.length > 1 &&
-            questionOrder.every((value, index) => index === 0 || questionOrder[index - 1] > value)
+        const isStrictlyAscending =
+            questionOrder.length <= 1 ||
+            questionOrder.every((value, index) => index === 0 || questionOrder[index - 1] < value)
+        const hasUniqueQuestionOrder = new Set(questionOrder).size === questionOrder.length
 
-        const questionBlocks = isStrictlyDescending
+        const questionBlocks = !isStrictlyAscending && hasUniqueQuestionOrder
             ? [...extractedBlocks].sort((a, b) => a.questionNumber - b.questionNumber)
             : extractedBlocks
 
