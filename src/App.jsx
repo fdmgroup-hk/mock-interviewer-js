@@ -3,7 +3,6 @@ import {
     FaceLandmarker,
     FilesetResolver,
 } from '@mediapipe/tasks-vision'
-import { APP_VERSION } from './version'
 import {
     getSpeechFallbackConfig,
     transcribeWithFallback,
@@ -56,6 +55,7 @@ import { jsPDF } from 'jspdf'
 import { marked } from 'marked'
 import ReactMarkdown from 'react-markdown'
 import './App.css'
+import { APP_VERSION } from './version'
 
 const STORAGE_KEY = 'mia.deepgram.apiKey'
 const STORAGE_VALIDATED_AT = 'mia.deepgram.lastValidatedAt'
@@ -6135,7 +6135,6 @@ function App() {
                 <div className="topbar-inner">
                     <div className="topbar-title-row">
                         <h1>Mock Interviewer</h1>
-                        <span className="topbar-version-label">v{APP_VERSION}</span>
                     </div>
                     <div className="topbar-mode-center">
                         <div className="camera-mode-toggle topbar-mode-toggle" role="group" aria-label="Interview mode">
@@ -6509,74 +6508,76 @@ function App() {
                                                     </button>
                                                 </span>
                                             </div>
-                                            <span
-                                                className={`disabled-tooltip-wrap question-next-tooltip-wrap camera-recording-next-wrap${showNoNextQuestionTooltip ? ' has-tooltip' : ''}`}
-                                            >
-                                                {hasQuestionsInList ? (
-                                                    <>
+                                            {isDesktopViewport && (
+                                                <span
+                                                    className={`disabled-tooltip-wrap question-next-tooltip-wrap camera-recording-next-wrap${showNoNextQuestionTooltip ? ' has-tooltip' : ''}`}
+                                                >
+                                                    {hasQuestionsInList ? (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="btn ghost question-prev-btn two-line-btn"
+                                                                onClick={handlePreviousQuestionAction}
+                                                                disabled={isImportQuestionDisabled}
+                                                                title="Go to previous question"
+                                                            >
+                                                                <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                                                    chevron_left
+                                                                </span>
+                                                                <span className="question-nav-label">
+                                                                    Previous
+                                                                    <br />
+                                                                    Question
+                                                                </span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="btn question-next-btn two-line-btn"
+                                                                onClick={handleNextQuestionAction}
+                                                                disabled={isImportQuestionDisabled}
+                                                                title={nextQuestionTitle}
+                                                            >
+                                                                <span className="question-nav-label">
+                                                                    Next
+                                                                    <br />
+                                                                    Question
+                                                                </span>
+                                                                <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                                                    chevron_right
+                                                                </span>
+                                                            </button>
+                                                        </>
+                                                    ) : isGeneratingQuestions ? null : canPromptGenerateQuestionsFromCvJd ? (
                                                         <button
                                                             type="button"
-                                                            className="btn ghost question-prev-btn two-line-btn"
-                                                            onClick={handlePreviousQuestionAction}
+                                                            className="btn question-next-btn question-generate-btn two-line-btn"
+                                                            onClick={generateQuestionsInBackground}
                                                             disabled={isImportQuestionDisabled}
-                                                            title="Go to previous question"
+                                                            title="Generate questions in the background"
                                                         >
-                                                            <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
-                                                                chevron_left
-                                                            </span>
                                                             <span className="question-nav-label">
-                                                                Previous
+                                                                Generate
                                                                 <br />
-                                                                Question
+                                                                Questions
                                                             </span>
                                                         </button>
+                                                    ) : (
                                                         <button
                                                             type="button"
-                                                            className="btn question-next-btn two-line-btn"
-                                                            onClick={handleNextQuestionAction}
+                                                            className="btn ghost question-next-btn two-line-btn"
+                                                            onClick={openCvJdModal}
                                                             disabled={isImportQuestionDisabled}
-                                                            title={nextQuestionTitle}
+                                                            title="Add CV and JD details first"
                                                         >
                                                             <span className="question-nav-label">
-                                                                Next
+                                                                Add JD and CV
                                                                 <br />
-                                                                Question
-                                                            </span>
-                                                            <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
-                                                                chevron_right
+                                                                information
                                                             </span>
                                                         </button>
-                                                    </>
-                                                ) : isGeneratingQuestions ? null : canPromptGenerateQuestionsFromCvJd ? (
-                                                    <button
-                                                        type="button"
-                                                        className="btn question-next-btn question-generate-btn two-line-btn"
-                                                        onClick={generateQuestionsInBackground}
-                                                        disabled={isImportQuestionDisabled}
-                                                        title="Generate questions in the background"
-                                                    >
-                                                        <span className="question-nav-label">
-                                                            Generate
-                                                            <br />
-                                                            Questions
-                                                        </span>
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="btn ghost question-next-btn two-line-btn"
-                                                        onClick={openCvJdModal}
-                                                        disabled={isImportQuestionDisabled}
-                                                        title="Add CV and JD details first"
-                                                    >
-                                                        <span className="question-nav-label">
-                                                            Add JD and CV
-                                                            <br />
-                                                            information
-                                                        </span>
-                                                    </button>
-                                                )}
-                                            </span>
+                                                    )}
+                                                </span>
+                                            )}
                                         </>
                                     )}
                                 </>
@@ -6590,6 +6591,168 @@ function App() {
                                 </button>
                             ) : null}
                         </div>
+
+                        {!isDesktopViewport && isPracticeMode && (
+                            <div className="mobile-practice-question-actions">
+                                <button
+                                    type="button"
+                                    className="btn ghost question-prev-btn two-line-btn"
+                                    onClick={handlePreviousQuestionAction}
+                                    disabled={!hasQuestionsInList || isImportQuestionDisabled}
+                                    title={
+                                        hasQuestionsInList
+                                            ? 'Go to previous question'
+                                            : 'Generate questions first.'
+                                    }
+                                >
+                                    <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                        chevron_left
+                                    </span>
+                                    <span className="question-nav-label">
+                                        Previous
+                                        <br />
+                                        Question
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn question-next-btn two-line-btn"
+                                    onClick={handleNextQuestionAction}
+                                    disabled={!hasQuestionsInList || isImportQuestionDisabled}
+                                    title={
+                                        hasQuestionsInList
+                                            ? nextQuestionTitle
+                                            : 'Generate questions first.'
+                                    }
+                                >
+                                    <span className="question-nav-label">
+                                        Next
+                                        <br />
+                                        Question
+                                    </span>
+                                    <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                        chevron_right
+                                    </span>
+                                </button>
+                                {!hasQuestionsInList && !isGeneratingQuestions && (
+                                    canPromptGenerateQuestionsFromCvJd ? (
+                                        <div className="mobile-question-generate-stack">
+                                            <button
+                                                type="button"
+                                                className="btn ghost question-next-btn two-line-btn"
+                                                onClick={openCvJdModal}
+                                                disabled={isImportQuestionDisabled}
+                                                title="Review or update CV and JD details"
+                                            >
+                                                <span className="question-nav-label">
+                                                    Input JD/CV
+                                                </span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="btn question-next-btn question-generate-btn two-line-btn"
+                                                onClick={generateQuestionsInBackground}
+                                                disabled={isImportQuestionDisabled}
+                                                title="Generate questions in the background"
+                                            >
+                                                <span className="question-nav-label">
+                                                    Generate
+                                                    <br />
+                                                    Questions
+                                                </span>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="btn ghost question-next-btn two-line-btn"
+                                            onClick={openCvJdModal}
+                                            disabled={isImportQuestionDisabled}
+                                            title="Add CV and JD details first"
+                                        >
+                                            <span className="question-nav-label">
+                                                Add JD and CV
+                                                <br />
+                                                information
+                                            </span>
+                                        </button>
+                                    )
+                                )}
+                            </div>
+                        )}
+
+                        {!isDesktopViewport && isPracticeMode && (
+                            <div className="practice-mobile-secondary-actions">
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={() => {
+                                        closeSummaryModal()
+                                        closeCvJdModal()
+                                        closePreviousAnswersModal()
+                                        setQuestionsDrawerOpen((prev) => !prev)
+                                    }}
+                                    aria-expanded={questionsDrawerOpen}
+                                    aria-controls="questions-modal"
+                                    disabled={isGeneratingQuestions}
+                                    title={
+                                        isGeneratingQuestions
+                                            ? 'Generating questions...'
+                                            : questionsDrawerOpen
+                                                ? 'Hide questions list modal'
+                                                : 'Show questions list modal'
+                                    }
+                                >
+                                    Questions List
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={() => {
+                                        if (summaryModalOpen) {
+                                            closeSummaryModal()
+                                            return
+                                        }
+
+                                        closeCvJdModal()
+                                        closePreviousAnswersModal()
+                                        setQuestionsDrawerOpen(false)
+                                        openSummaryModal()
+                                    }}
+                                    aria-expanded={summaryModalOpen}
+                                    aria-controls="summary-modal"
+                                    disabled={isSummaryViewDisabled}
+                                    title={
+                                        summaryModalOpen
+                                            ? 'Hide answer summary modal'
+                                            : 'Show answer summary modal'
+                                    }
+                                >
+                                    Answer Summary
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn"
+                                    onClick={() => {
+                                        void generateCombinedInterviewReports()
+                                    }}
+                                    disabled={
+                                        isGeneratingAmReport ||
+                                        isGeneratingDetailedReport ||
+                                        !interviewSummaries.length
+                                    }
+                                    title={
+                                        interviewSummaries.length
+                                            ? 'Generate reports sequentially (Detailed first, then AM) and review both PDFs side-by-side'
+                                            : 'Answer a question first to generate reports.'
+                                    }
+                                >
+                                    {(isGeneratingAmReport || isGeneratingDetailedReport)
+                                        ? 'Generating Reports...'
+                                        : 'Generate Reports'}
+                                </button>
+                            </div>
+                        )}
 
                         {!isPracticeMode && (
                             <div className="actions wrap mock-interview-actions">
