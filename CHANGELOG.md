@@ -19,6 +19,15 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.21] - 2026-08-11
+
+### Changed
+- Updated the Detailed Report streaming panel to render live formatted markdown output as chunks arrive.
+
+### Fixed
+- Disabled text selection in the Detailed Report stream panel so both AM and Detailed previews are non-selectable.
+- Normalized malformed detailed question headings such as `### ### Question1:` into canonical `### Question 1:` formatting.
+
 ## [1.10.20] - 2026-08-11
 
 ### Changed

@@ -1990,16 +1990,6 @@ h3 {
     line-height: 1.5;
 }
 
-.am-report-stream-content-raw {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font: inherit;
-    line-height: inherit;
-    user-select: text;
-    -webkit-user-select: text;
-}
-
 .am-report-stream-content :is(p, ul, ol, li, h1, h2, h3, h4, h5, h6, pre, code, blockquote) {
     user-select: none;
     -webkit-user-select: none;

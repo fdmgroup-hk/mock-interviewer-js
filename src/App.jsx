@@ -3025,10 +3025,29 @@ function App() {
         return lines.join('\n').replace(/\n{3,}/g, '\n\n')
     }
 
+    function normalizeDetailedReportQuestionHeadings(markdownText) {
+        const normalizedMarkdown = String(markdownText || '').replace(/\r\n?/g, '\n')
+
+        return normalizedMarkdown.replace(
+            /^\s*(?:#{1,6}\s*)+Question\s*(\d+)\s*:?\s*(.*?)\s*$/gim,
+            (_match, questionNumberRaw, headingSuffixRaw) => {
+                const questionNumber = Number.parseInt(questionNumberRaw, 10)
+                if (!Number.isInteger(questionNumber) || questionNumber <= 0) {
+                    return _match
+                }
+
+                const headingSuffix = String(headingSuffixRaw || '').trim()
+                return headingSuffix
+                    ? `### Question ${questionNumber}: ${headingSuffix}`
+                    : `### Question ${questionNumber}:`
+            },
+        )
+    }
+
     function normalizeDetailedReportMarkdownForPdf(detailedMarkdown, summaries) {
-        const normalizedMarkdown = String(detailedMarkdown || '').replace(/\r\n?/g, '\n')
+        const normalizedMarkdown = normalizeDetailedReportQuestionHeadings(detailedMarkdown)
         const questionHeadingPattern =
-            /^((?:#{1,6})\s*Question\s+(\d+)\b[^\n]*|\*\*\s*Question\s+(\d+)\b[^*\n]*\*\*)\s*$/gim
+            /^((?:#{1,6})\s*Question\s*(\d+)\b[^\n]*|\*\*\s*Question\s*(\d+)\b[^*\n]*\*\*)\s*$/gim
 
         const extractedBlocks = []
         const headingMatches = []
@@ -3064,7 +3083,7 @@ function App() {
 
             const canonicalHeading = headingText
                 ? `### Question ${current.questionNumber}: ${headingText}`
-                : `### Question ${current.questionNumber}`
+                : `### Question ${current.questionNumber}:`
 
             const rawBlockLines = rawBlockText.split('\n')
             rawBlockLines[0] = canonicalHeading
@@ -3477,7 +3496,9 @@ function App() {
                             },
                             stream: true,
                             onChunk: (fullText) => {
-                                setDetailedReportMarkdownPreview(fullText || '')
+                                setDetailedReportMarkdownPreview(
+                                    normalizeDetailedReportQuestionHeadings(fullText || ''),
+                                )
                             },
                             signal: controller.signal,
                         })
@@ -3497,8 +3518,10 @@ function App() {
                     throw lastError || new Error('Could not generate detailed report.')
                 }
 
+                const normalizedDetailedText = normalizeDetailedReportQuestionHeadings(result.text)
+
                 const normalizedDetailedPdfMarkdown = normalizeDetailedReportMarkdownForPdf(
-                    result.text,
+                    normalizedDetailedText,
                     interviewSummaries,
                 )
 
@@ -3518,7 +3541,7 @@ function App() {
                     throw new Error('Could not prepare detailed report PDF.')
                 }
 
-                return { text: result.text, pdfDocument }
+                return { text: normalizedDetailedText, pdfDocument }
             } finally {
                 detailedReportAbortControllerRef.current = null
             }
@@ -8751,10 +8774,8 @@ function App() {
                                 <div className="combined-report-stream-panel">
                                     <h3>Detailed Report</h3>
                                     <div className="question-modal-inner am-report-stream-inner" ref={detailedReportPreviewScrollRef}>
-                                        <div className="am-report-stream-content">
-                                            <pre className="am-report-stream-content-raw">
-                                                {detailedReportMarkdownPreview || 'Generating detailed report...'}
-                                            </pre>
+                                        <div className="am-report-stream-content no-select">
+                                            <ReactMarkdown>{detailedReportMarkdownPreview || 'Generating detailed report...'}</ReactMarkdown>
                                         </div>
                                     </div>
                                 </div>
