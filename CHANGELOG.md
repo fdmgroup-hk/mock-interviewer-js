@@ -19,6 +19,11 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.15] - 2026-08-11
+
+### Changed
+- Updated AM report generation prompts to exclude score sections/output (removed overall score requirements from AM prompt templates).
+
 ## [1.10.14] - 2026-08-11
 
 ### Changed
