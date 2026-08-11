@@ -3,7 +3,6 @@ import {
     FaceLandmarker,
     FilesetResolver,
 } from '@mediapipe/tasks-vision'
-import { APP_VERSION } from './version'
 import {
     getSpeechFallbackConfig,
     transcribeWithFallback,
@@ -56,6 +55,7 @@ import { jsPDF } from 'jspdf'
 import { marked } from 'marked'
 import ReactMarkdown from 'react-markdown'
 import './App.css'
+import { APP_VERSION } from './version'
 
 const STORAGE_KEY = 'mia.deepgram.apiKey'
 const STORAGE_VALIDATED_AT = 'mia.deepgram.lastValidatedAt'
@@ -113,28 +113,34 @@ const DEFAULT_GENERATED_QUESTION_COUNT = 10
 const DEFAULT_QUESTION_GENERATION_GUIDELINES =
     'Generate concise, role-relevant interview questions. Cover technical depth, behavioral examples, and company alignment. Avoid duplicates. Return one question per line.'
 const DEFAULT_AM_REPORT_GENERATION_GUIDELINES =
-    'Generate a report for an account-manager at a consulting firm regarding the Answers provided in context, which were answered by a consultant. Provide feedback grounded in the interview answer transcript, answer metrics, JD and CV. Be specific, concise, and evidence-based. Do not generate per-question feedback. Use markdown only (no HTML) and follow this structure: ## Summary, ## Overall Score (out of 10), ## Key Strengths, ## Key Development Areas, ## Domain Knowledge Assessment, ## Interview Progression, ## Primary Interview Risks, ## Recommended Coach Actions, ## Final Recommendation.'
+    'Generate a report for an account-manager at a consulting firm regarding the Answers provided in context, which were answered by a consultant. Provide feedback grounded in the interview answer transcript, answer metrics, JD and CV. Be specific, concise, and evidence-based. Do not generate per-question feedback. Use markdown only (no HTML) and follow this structure: ## Summary, ## Key Strengths, ## Key Weaknesses, ## Domain Knowledge Assessment, ## Recommended Coach Actions, ## Final Recommendation.'
 const DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES =
     'Generate an in-depth report with an executive summary first, then detailed per-question analysis. For each question include strengths, weaknesses, metric interpretation, and a suggested improved answer. Tailor suggested answers to CV/JD/company/job title when relevant, and explicitly state when profile context is not relevant to that specific question.'
 const QUESTION_GENERATION_USER_MESSAGE = (questionCount, jdOnlyQuestionCount) =>
     `Generate ${questionCount} concise mock interview questions based on the provided CV, job description, and company. If a job description is provided, include at least ${jdOnlyQuestionCount} questions that are derived only from the job description requirements and are not based on the CV. Return only the questions, one per line, no intro or explanation.`
 const AM_REPORT_USER_MESSAGE =
-    'You are an Interview Expert for a Consulting Firm. You are writing feedback for mock interview answers. Using interview Job Title, Q&A transcript, Q&A metrics, JD and CV, return concise, evidence-based markdown in this exact section order: 1) ## Overall Verdict, 2) ## Overall Score (out of 10) 3) ## Key Strengths, 4) ## Key Development Areas, 5) ## Domain Knowledge Assessment, 6) ## Interview Progression, 7) ## Primary Interview Risks, 8) ## Recommended Coach Actions, 9) ## Final Recommendation. Keep it account-manager friendly and do not include per-question analysis.'
+    'You are an Interview Expert for a Consulting Firm. You are writing feedback for mock interview answers. Using interview Job Title, Q&A transcript, Q&A metrics, JD and CV, return concise, evidence-based markdown in this exact section order: 1) ## Overall Verdict, 2) ## Key Strengths, 3) ## Key Weaknesses, 4) ## Domain Knowledge Assessment, 5) ## Recommended Coach Actions, 6) ## Final Recommendation. Keep it account-manager friendly and do not include per-question analysis.'
 const DETAILED_REPORT_USER_MESSAGE =
     'You are an Interview Expert for a Consulting Firm. Using the provided interview context, return markdown with these exact top-level sections in order: 1) Initial Feedback, 2) Overall Rating (out of 10), 3) Answer Strengths, 4) Answer Weaknesses, 5) Future Directions For Improvement, 6) Detailed Per-Question Analysis. In section 6, create one subsection per answer using heading format "### Question N: <question>" and include: Candidate Answer Snapshot, Strengths, Weaknesses, Metric Interpretation, Suggested Improved Answer. The Suggested Improved Answer must describe an ideal answer and tailor it to CV/JD/company/job title context when relevant; if not relevant, explicitly state that no CV/JD tailoring applies. Keep feedback specific, concise, and evidence-based using transcript and metrics.'
 const LLM_PROVIDER_ENV_CONFIG = getLlmProviderConfig(import.meta.env)
 const OPENROUTER_BASE_URL = LLM_PROVIDER_ENV_CONFIG.openrouter.baseUrl
 const DEFAULT_NIM_BASE_URL = LLM_PROVIDER_ENV_CONFIG.nim.baseUrl
+const DEFAULT_NIM_DETAILED_REPORT_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
+const DEFAULT_NIM_AM_REPORT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b'
 const LLM_HTTP_ERROR_TOAST_PREFIX = 'LLM API HTTP error:'
 const LLM_HTTP_ERROR_TOAST_TIMEOUT_MS = 10000
 const LLM_HTTP_ERROR_MESSAGE_MAX_LENGTH = 180
 const UNSAVED_QA_WARNING_MESSAGE =
     'Questions and Answer Summaries will not be saved. Please download the reports as needed.'
+const POST_REPORT_FEEDBACK_FORM_URL =
+    'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=glOkWCW86EGcIlkUGYi-mnE0rK0SAJ9DlEqB6Zp22mxUQzYxQkdBRlZYVjJQQzlWTE9OTDdSQ0RWTC4u'
 const CUSTOM_MODEL_OPTION_VALUE = '__custom__'
+const DEFAULT_OPENROUTER_MODEL_OPTION_VALUE = '__default_openrouter_model__'
+const DEFAULT_NIM_MODEL_OPTION_VALUE = '__default_nim_model__'
 const OPENROUTER_MODEL_PRESETS = [
     {
-        value: LLM_PROVIDER_ENV_CONFIG.openrouter.model,
-        label: `Default Model [${LLM_PROVIDER_ENV_CONFIG.openrouter.model}]`,
+        value: DEFAULT_OPENROUTER_MODEL_OPTION_VALUE,
+        label: 'Default model',
     },
     {
         value: 'nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -147,8 +153,16 @@ const OPENROUTER_MODEL_PRESETS = [
 ]
 const NIM_MODEL_PRESETS = [
     {
-        value: LLM_PROVIDER_ENV_CONFIG.nim.model,
-        label: `Default Model [${LLM_PROVIDER_ENV_CONFIG.nim.model}]`,
+        value: DEFAULT_NIM_MODEL_OPTION_VALUE,
+        label: 'Default model',
+    },
+    {
+        value: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+        label: 'NVIDIA Nemotron 3 Nano Omni 30B A3B Reasoning [nvidia/nemotron-3-nano-omni-30b-a3b-reasoning]',
+    },
+    {
+        value: 'nvidia/nemotron-3-ultra-550b-a55b',
+        label: 'NVIDIA Nemotron 3 Ultra 550B A55B [nvidia/nemotron-3-ultra-550b-a55b]',
     },
     {
         value: 'openai/gpt-oss-120b',
@@ -828,6 +842,8 @@ async function downloadInterviewReportPdf({
     consultantFullName,
     jobTitle,
     feedbackText,
+    llmProviderLabel,
+    llmModel,
     reportTitle = 'Account Manager Interview Feedback Report',
     feedbackSectionTitle = 'AM Feedback Output',
     fileNamePrefix = 'interview-report',
@@ -1429,6 +1445,8 @@ async function downloadInterviewReportPdf({
     const safeCompanyName = companyName || 'Unknown company'
     const safeConsultantFullName = consultantFullName || '(not provided)'
     const safeJobTitle = jobTitle || '(not provided)'
+    const safeLlmProviderLabel = sanitizeDisplayText(llmProviderLabel, '(unknown provider)')
+    const safeLlmModel = sanitizeDisplayText(llmModel, '(unknown model)')
     const safeFeedbackMarkdown = sanitizeMarkdownForPdf(
         String(feedbackText || '(no feedback output)').replace(/<[^>]*>/g, ''),
     )
@@ -1438,7 +1456,7 @@ async function downloadInterviewReportPdf({
         fontStyle: 'bold',
         spacingAfter: 4,
     })
-    writeTextBlock(`Generated: ${displayStamp}`, {
+    writeTextBlock(`Generated: ${displayStamp} | LLM Provider: ${safeLlmProviderLabel} | LLM Model: ${safeLlmModel}`, {
         fontSize: 10,
         spacingAfter: 2,
     })
@@ -1808,17 +1826,21 @@ function App() {
             getSavedValue(STORAGE_NIM_MODEL) || LLM_PROVIDER_ENV_CONFIG.nim.model
         const persistedNimBaseUrl = getSavedValue(STORAGE_NIM_BASE_URL) || DEFAULT_NIM_BASE_URL
 
-        const initialOpenrouterCustomModelInput = OPENROUTER_MODEL_PRESETS.some(
-            (preset) => preset.value === String(persistedOpenrouterModel || '').trim(),
-        )
-            ? ''
-            : String(persistedOpenrouterModel || '').trim()
+        const normalizedPersistedOpenrouterModel = String(persistedOpenrouterModel || '').trim()
+        const initialOpenrouterCustomModelInput =
+            normalizedPersistedOpenrouterModel === LLM_PROVIDER_ENV_CONFIG.openrouter.model ||
+                OPENROUTER_MODEL_PRESETS.some(
+                    (preset) => preset.value === normalizedPersistedOpenrouterModel,
+                )
+                ? ''
+                : normalizedPersistedOpenrouterModel
 
-        const initialNimCustomModelInput = NIM_MODEL_PRESETS.some(
-            (preset) => preset.value === String(persistedNimModel || '').trim(),
-        )
-            ? ''
-            : String(persistedNimModel || '').trim()
+        const normalizedPersistedNimModel = String(persistedNimModel || '').trim()
+        const initialNimCustomModelInput =
+            normalizedPersistedNimModel === LLM_PROVIDER_ENV_CONFIG.nim.model ||
+                NIM_MODEL_PRESETS.some((preset) => preset.value === normalizedPersistedNimModel)
+                ? ''
+                : normalizedPersistedNimModel
 
         return {
             llmProviderMode: persistedLlmProviderMode,
@@ -1894,15 +1916,27 @@ function App() {
         [],
     )
 
-    const openrouterModelSelectValue = useMemo(
-        () => getModelSelectValue(openrouterModelInput, OPENROUTER_MODEL_PRESETS, CUSTOM_MODEL_OPTION_VALUE),
-        [openrouterModelInput],
-    )
+    const openrouterModelSelectValue = useMemo(() => {
+        const normalizedCurrent = String(openrouterModelInput || '').trim()
+        if (!normalizedCurrent) return CUSTOM_MODEL_OPTION_VALUE
+        if (normalizedCurrent === LLM_PROVIDER_ENV_CONFIG.openrouter.model) {
+            return DEFAULT_OPENROUTER_MODEL_OPTION_VALUE
+        }
+        return getModelSelectValue(
+            normalizedCurrent,
+            OPENROUTER_MODEL_PRESETS,
+            CUSTOM_MODEL_OPTION_VALUE,
+        )
+    }, [openrouterModelInput])
 
-    const nimModelSelectValue = useMemo(
-        () => getModelSelectValue(nimModelInput, NIM_MODEL_PRESETS, CUSTOM_MODEL_OPTION_VALUE),
-        [nimModelInput],
-    )
+    const nimModelSelectValue = useMemo(() => {
+        const normalizedCurrent = String(nimModelInput || '').trim()
+        if (!normalizedCurrent) return CUSTOM_MODEL_OPTION_VALUE
+        if (normalizedCurrent === LLM_PROVIDER_ENV_CONFIG.nim.model) {
+            return DEFAULT_NIM_MODEL_OPTION_VALUE
+        }
+        return getModelSelectValue(normalizedCurrent, NIM_MODEL_PRESETS, CUSTOM_MODEL_OPTION_VALUE)
+    }, [nimModelInput])
 
     const needsRevalidation = useMemo(() => {
         if (!lastValidatedAt) return false
@@ -2396,27 +2430,6 @@ function App() {
         setSelectedPreviousAnswerId(firstItem.id)
         await loadHistoryMedia(firstItem)
         setHistoryModalOpen(true)
-    }
-
-    async function openLocalStoragePreviousAnswersFromSettings() {
-        setPreviousAnswersSource(PREVIOUS_ANSWERS_SOURCE_LOCAL_STORAGE)
-
-        const items = await loadPreviousAnswersFromLocalStorage()
-        if (!items.length) {
-            setHistoryModalOpen(true)
-            setSelectedPreviousAnswerId('')
-            replaceHistoryMediaUrls({ audioUrl: '', videoUrl: '' })
-            return
-        }
-
-        const firstItem = items[0]
-        setSelectedPreviousAnswerId(firstItem.id)
-        await loadHistoryMedia(firstItem)
-        setHistoryModalOpen(true)
-    }
-
-    function openSessionSummaryFromSettings() {
-        openSummaryModal()
     }
 
     // Keep dependencies minimal here to avoid callback identity churn from custom hook setters.
@@ -3012,10 +3025,29 @@ function App() {
         return lines.join('\n').replace(/\n{3,}/g, '\n\n')
     }
 
+    function normalizeDetailedReportQuestionHeadings(markdownText) {
+        const normalizedMarkdown = String(markdownText || '').replace(/\r\n?/g, '\n')
+
+        return normalizedMarkdown.replace(
+            /^\s*(?:#{1,6}\s*)+Question\s*(\d+)\s*:?\s*(.*?)\s*$/gim,
+            (_match, questionNumberRaw, headingSuffixRaw) => {
+                const questionNumber = Number.parseInt(questionNumberRaw, 10)
+                if (!Number.isInteger(questionNumber) || questionNumber <= 0) {
+                    return _match
+                }
+
+                const headingSuffix = String(headingSuffixRaw || '').trim()
+                return headingSuffix
+                    ? `### Question ${questionNumber}: ${headingSuffix}`
+                    : `### Question ${questionNumber}:`
+            },
+        )
+    }
+
     function normalizeDetailedReportMarkdownForPdf(detailedMarkdown, summaries) {
-        const normalizedMarkdown = String(detailedMarkdown || '').replace(/\r\n?/g, '\n')
+        const normalizedMarkdown = normalizeDetailedReportQuestionHeadings(detailedMarkdown)
         const questionHeadingPattern =
-            /^((?:#{1,6})\s*Question\s+(\d+)\b[^\n]*|\*\*\s*Question\s+(\d+)\b[^*\n]*\*\*)\s*$/gim
+            /^((?:#{1,6})\s*Question\s*(\d+)\b[^\n]*|\*\*\s*Question\s*(\d+)\b[^*\n]*\*\*)\s*$/gim
 
         const extractedBlocks = []
         const headingMatches = []
@@ -3051,7 +3083,7 @@ function App() {
 
             const canonicalHeading = headingText
                 ? `### Question ${current.questionNumber}: ${headingText}`
-                : `### Question ${current.questionNumber}`
+                : `### Question ${current.questionNumber}:`
 
             const rawBlockLines = rawBlockText.split('\n')
             rawBlockLines[0] = canonicalHeading
@@ -3161,6 +3193,24 @@ function App() {
         }
 
         return providerCandidates
+    }
+
+    function resolveReportProviderModel(providerConfig, reportType) {
+        if (providerConfig.providerId !== 'nim') {
+            return providerConfig.model
+        }
+
+        const configuredModel = String(providerConfig.model || '').trim()
+        const defaultNimModel = String(LLM_PROVIDER_ENV_CONFIG.nim.model || '').trim()
+
+        // Only apply split defaults when user is still on the shared default model.
+        if (configuredModel && configuredModel !== defaultNimModel) {
+            return configuredModel
+        }
+
+        return reportType === 'am'
+            ? DEFAULT_NIM_AM_REPORT_MODEL
+            : DEFAULT_NIM_DETAILED_REPORT_MODEL
     }
 
     function showLlmProviderMissingKeyToast() {
@@ -3366,6 +3416,13 @@ function App() {
             return
         }
 
+        // Reserve a tab during the direct user gesture to avoid popup blocking later.
+        const reservedFeedbackTab = window.open('', '_blank')
+        if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
+            reservedFeedbackTab.document.title = 'Opening feedback form...'
+            reservedFeedbackTab.document.body.textContent = 'Preparing reports. This tab will open the feedback form automatically.'
+        }
+
         const summaryMarkdown = buildAnswerSummaryMarkdown(
             interviewSummaries,
             overallInterviewSummary,
@@ -3398,6 +3455,8 @@ function App() {
         const generateDetailedTask = async () => {
             let result = null
             let lastError = null
+            let usedProviderLabel = ''
+            let usedModel = ''
             const controller = new AbortController()
             detailedReportAbortControllerRef.current = controller
 
@@ -3415,12 +3474,13 @@ function App() {
                     const providerLabel = getLlmProviderUsageLabel(providerConfig.providerId)
                     const providerUsageMessage = `Generating Detailed Report, LLM API used: ${providerLabel}`
                     console.info(providerUsageMessage)
+                    const resolvedModel = resolveReportProviderModel(providerConfig, 'detailed')
 
                     try {
                         result = await sendInterviewChatMessage({
                             providerId: providerConfig.providerId,
                             apiKey: providerConfig.apiKey,
-                            model: providerConfig.model,
+                            model: resolvedModel,
                             baseUrl: providerConfig.baseUrl,
                             userMessage: DETAILED_REPORT_USER_MESSAGE,
                             context: {
@@ -3436,10 +3496,14 @@ function App() {
                             },
                             stream: true,
                             onChunk: (fullText) => {
-                                setDetailedReportMarkdownPreview(fullText || '')
+                                setDetailedReportMarkdownPreview(
+                                    normalizeDetailedReportQuestionHeadings(fullText || ''),
+                                )
                             },
                             signal: controller.signal,
                         })
+                        usedProviderLabel = providerLabel
+                        usedModel = resolvedModel
                         break
                     } catch (error) {
                         if (error?.code === 'request-aborted') {
@@ -3454,8 +3518,10 @@ function App() {
                     throw lastError || new Error('Could not generate detailed report.')
                 }
 
+                const normalizedDetailedText = normalizeDetailedReportQuestionHeadings(result.text)
+
                 const normalizedDetailedPdfMarkdown = normalizeDetailedReportMarkdownForPdf(
-                    result.text,
+                    normalizedDetailedText,
                     interviewSummaries,
                 )
 
@@ -3464,6 +3530,8 @@ function App() {
                     consultantFullName,
                     jobTitle,
                     feedbackText: normalizedDetailedPdfMarkdown,
+                    llmProviderLabel: usedProviderLabel,
+                    llmModel: usedModel,
                     reportTitle: 'Detailed Interview Report',
                     feedbackSectionTitle: 'Detailed Feedback Output',
                     fileNamePrefix: 'detailed-interview-report',
@@ -3473,7 +3541,7 @@ function App() {
                     throw new Error('Could not prepare detailed report PDF.')
                 }
 
-                return { text: result.text, pdfDocument }
+                return { text: normalizedDetailedText, pdfDocument }
             } finally {
                 detailedReportAbortControllerRef.current = null
             }
@@ -3482,6 +3550,8 @@ function App() {
         const generateAmTask = async (detailedReportText) => {
             let result = null
             let lastError = null
+            let usedProviderLabel = ''
+            let usedModel = ''
             const controller = new AbortController()
             amReportAbortControllerRef.current = controller
 
@@ -3499,12 +3569,13 @@ function App() {
                     const providerLabel = getLlmProviderUsageLabel(providerConfig.providerId)
                     const providerUsageMessage = `Generating AM Report, LLM API used: ${providerLabel}`
                     console.info(providerUsageMessage)
+                    const resolvedModel = resolveReportProviderModel(providerConfig, 'am')
 
                     try {
                         result = await sendInterviewChatMessage({
                             providerId: providerConfig.providerId,
                             apiKey: providerConfig.apiKey,
-                            model: providerConfig.model,
+                            model: resolvedModel,
                             baseUrl: providerConfig.baseUrl,
                             userMessage: AM_REPORT_USER_MESSAGE,
                             context: {
@@ -3524,6 +3595,8 @@ function App() {
                             },
                             signal: controller.signal,
                         })
+                        usedProviderLabel = providerLabel
+                        usedModel = resolvedModel
                         break
                     } catch (error) {
                         if (error?.code === 'request-aborted') {
@@ -3543,6 +3616,8 @@ function App() {
                     consultantFullName,
                     jobTitle,
                     feedbackText: result.text,
+                    llmProviderLabel: usedProviderLabel,
+                    llmModel: usedModel,
                     reportTitle: 'Account Manager Interview Feedback Report',
                     feedbackSectionTitle: 'AM Feedback Output',
                     fileNamePrefix: 'am-feedback-report',
@@ -3580,10 +3655,39 @@ function App() {
             setAmReportPdfFileName(amResult.pdfDocument.fileName || 'am-feedback-report.pdf')
             hasAmPdf = true
 
+            downloadBlob(
+                detailedResult.pdfDocument.blob,
+                detailedResult.pdfDocument.fileName || 'detailed-interview-report.pdf',
+            )
+            downloadBlob(
+                amResult.pdfDocument.blob,
+                amResult.pdfDocument.fileName || 'am-feedback-report.pdf',
+            )
+
+            let feedbackTab = null
+            if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
+                reservedFeedbackTab.location.href = POST_REPORT_FEEDBACK_FORM_URL
+                feedbackTab = reservedFeedbackTab
+            } else {
+                feedbackTab = window.open(
+                    POST_REPORT_FEEDBACK_FORM_URL,
+                    '_blank',
+                    'noopener,noreferrer',
+                )
+            }
+
             setCombinedReportModalOpen(false)
             setCombinedReportPdfPreviewOpen(true)
-            setToast('Detailed and AM PDFs ready. Review or download.')
+            if (feedbackTab) {
+                setToast('Detailed and AM PDFs downloaded. Feedback form opened in a new tab.')
+            } else {
+                setToast('Detailed and AM PDFs downloaded. Please allow pop-ups to open the feedback form.')
+            }
         } catch (error) {
+            if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
+                reservedFeedbackTab.close()
+            }
+
             setCombinedReportModalOpen(false)
 
             if (hasDetailedPdf || hasAmPdf) {
@@ -4530,7 +4634,8 @@ function App() {
         setOpenrouterApiKeyInput(openrouterApiKey)
         setOpenrouterModelInput(openrouterModel)
         setOpenrouterCustomModelInput(
-            OPENROUTER_MODEL_PRESETS.some((preset) => preset.value === openrouterModel)
+            openrouterModel === LLM_PROVIDER_ENV_CONFIG.openrouter.model ||
+                OPENROUTER_MODEL_PRESETS.some((preset) => preset.value === openrouterModel)
                 ? ''
                 : openrouterModel,
         )
@@ -4538,7 +4643,8 @@ function App() {
         setNimModelInput(nimModel)
         setNimBaseUrlInput(nimBaseUrl)
         setNimCustomModelInput(
-            NIM_MODEL_PRESETS.some((preset) => preset.value === nimModel)
+            nimModel === LLM_PROVIDER_ENV_CONFIG.nim.model ||
+                NIM_MODEL_PRESETS.some((preset) => preset.value === nimModel)
                 ? ''
                 : nimModel,
         )
@@ -4705,12 +4811,22 @@ function App() {
             return
         }
 
+        if (nextValue === DEFAULT_OPENROUTER_MODEL_OPTION_VALUE) {
+            setOpenrouterModelInput(LLM_PROVIDER_ENV_CONFIG.openrouter.model)
+            return
+        }
+
         setOpenrouterModelInput(nextValue)
     }
 
     function handleNimModelSelection(nextValue) {
         if (nextValue === CUSTOM_MODEL_OPTION_VALUE) {
             setNimModelInput(nimCustomModelInput.trim())
+            return
+        }
+
+        if (nextValue === DEFAULT_NIM_MODEL_OPTION_VALUE) {
+            setNimModelInput(LLM_PROVIDER_ENV_CONFIG.nim.model)
             return
         }
 
@@ -6156,7 +6272,26 @@ function App() {
                 <div className="topbar-inner">
                     <div className="topbar-title-row">
                         <h1>Mock Interviewer</h1>
-                        <span className="topbar-version-label">v{APP_VERSION}</span>
+                    </div>
+                    <div className="topbar-mode-center">
+                        <div className="camera-mode-toggle topbar-mode-toggle" role="group" aria-label="Interview mode">
+                            <button
+                                type="button"
+                                className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE ? ' is-active' : ' ghost'}`}
+                                onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_PRACTICE)}
+                                aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE}
+                            >
+                                Practice Mode
+                            </button>
+                            <button
+                                type="button"
+                                className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? ' is-active' : ' ghost'}`}
+                                onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW)}
+                                aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW}
+                            >
+                                Mock Interview Mode
+                            </button>
+                        </div>
                     </div>
                     <div className="topbar-actions">
                         <button
@@ -6257,7 +6392,7 @@ function App() {
                                 disabled={isGeneratingAmReport || isGeneratingDetailedReport || !interviewSummaries.length}
                                 title={
                                     interviewSummaries.length
-                                        ? 'Generate reports sequentially (Detailed first, then AM) and review both PDFs side-by-side'
+                                        ? 'Generate reports sequentially and review both PDFs side-by-side'
                                         : 'Answer a question first to generate reports.'
                                 }
                             >
@@ -6510,74 +6645,76 @@ function App() {
                                                     </button>
                                                 </span>
                                             </div>
-                                            <span
-                                                className={`disabled-tooltip-wrap question-next-tooltip-wrap camera-recording-next-wrap${showNoNextQuestionTooltip ? ' has-tooltip' : ''}`}
-                                            >
-                                                {hasQuestionsInList ? (
-                                                    <>
+                                            {isDesktopViewport && (
+                                                <span
+                                                    className={`disabled-tooltip-wrap question-next-tooltip-wrap camera-recording-next-wrap${showNoNextQuestionTooltip ? ' has-tooltip' : ''}`}
+                                                >
+                                                    {hasQuestionsInList ? (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="btn ghost question-prev-btn two-line-btn"
+                                                                onClick={handlePreviousQuestionAction}
+                                                                disabled={isImportQuestionDisabled}
+                                                                title="Go to previous question"
+                                                            >
+                                                                <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                                                    chevron_left
+                                                                </span>
+                                                                <span className="question-nav-label">
+                                                                    Previous
+                                                                    <br />
+                                                                    Question
+                                                                </span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="btn question-next-btn two-line-btn"
+                                                                onClick={handleNextQuestionAction}
+                                                                disabled={isImportQuestionDisabled}
+                                                                title={nextQuestionTitle}
+                                                            >
+                                                                <span className="question-nav-label">
+                                                                    Next
+                                                                    <br />
+                                                                    Question
+                                                                </span>
+                                                                <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                                                    chevron_right
+                                                                </span>
+                                                            </button>
+                                                        </>
+                                                    ) : isGeneratingQuestions ? null : canPromptGenerateQuestionsFromCvJd ? (
                                                         <button
                                                             type="button"
-                                                            className="btn ghost question-prev-btn two-line-btn"
-                                                            onClick={handlePreviousQuestionAction}
+                                                            className="btn question-next-btn question-generate-btn two-line-btn"
+                                                            onClick={generateQuestionsInBackground}
                                                             disabled={isImportQuestionDisabled}
-                                                            title="Go to previous question"
+                                                            title="Generate questions in the background"
                                                         >
-                                                            <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
-                                                                chevron_left
-                                                            </span>
                                                             <span className="question-nav-label">
-                                                                Previous
+                                                                Generate
                                                                 <br />
-                                                                Question
+                                                                Questions
                                                             </span>
                                                         </button>
+                                                    ) : (
                                                         <button
                                                             type="button"
-                                                            className="btn question-next-btn two-line-btn"
-                                                            onClick={handleNextQuestionAction}
+                                                            className="btn ghost question-next-btn two-line-btn"
+                                                            onClick={openCvJdModal}
                                                             disabled={isImportQuestionDisabled}
-                                                            title={nextQuestionTitle}
+                                                            title="Add CV and JD details first"
                                                         >
                                                             <span className="question-nav-label">
-                                                                Next
+                                                                Add JD and CV
                                                                 <br />
-                                                                Question
-                                                            </span>
-                                                            <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
-                                                                chevron_right
+                                                                information
                                                             </span>
                                                         </button>
-                                                    </>
-                                                ) : isGeneratingQuestions ? null : canPromptGenerateQuestionsFromCvJd ? (
-                                                    <button
-                                                        type="button"
-                                                        className="btn question-next-btn question-generate-btn two-line-btn"
-                                                        onClick={generateQuestionsInBackground}
-                                                        disabled={isImportQuestionDisabled}
-                                                        title="Generate questions in the background"
-                                                    >
-                                                        <span className="question-nav-label">
-                                                            Generate
-                                                            <br />
-                                                            Questions
-                                                        </span>
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="btn ghost question-next-btn two-line-btn"
-                                                        onClick={openCvJdModal}
-                                                        disabled={isImportQuestionDisabled}
-                                                        title="Add CV and JD details first"
-                                                    >
-                                                        <span className="question-nav-label">
-                                                            Add JD and CV
-                                                            <br />
-                                                            information
-                                                        </span>
-                                                    </button>
-                                                )}
-                                            </span>
+                                                    )}
+                                                </span>
+                                            )}
                                         </>
                                     )}
                                 </>
@@ -6591,6 +6728,168 @@ function App() {
                                 </button>
                             ) : null}
                         </div>
+
+                        {!isDesktopViewport && isPracticeMode && (
+                            <div className="mobile-practice-question-actions">
+                                <button
+                                    type="button"
+                                    className="btn ghost question-prev-btn two-line-btn"
+                                    onClick={handlePreviousQuestionAction}
+                                    disabled={!hasQuestionsInList || isImportQuestionDisabled}
+                                    title={
+                                        hasQuestionsInList
+                                            ? 'Go to previous question'
+                                            : 'Generate questions first.'
+                                    }
+                                >
+                                    <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                        chevron_left
+                                    </span>
+                                    <span className="question-nav-label">
+                                        Previous
+                                        <br />
+                                        Question
+                                    </span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn question-next-btn two-line-btn"
+                                    onClick={handleNextQuestionAction}
+                                    disabled={!hasQuestionsInList || isImportQuestionDisabled}
+                                    title={
+                                        hasQuestionsInList
+                                            ? nextQuestionTitle
+                                            : 'Generate questions first.'
+                                    }
+                                >
+                                    <span className="question-nav-label">
+                                        Next
+                                        <br />
+                                        Question
+                                    </span>
+                                    <span className="material-symbols-outlined question-nav-icon" aria-hidden="true">
+                                        chevron_right
+                                    </span>
+                                </button>
+                                {!hasQuestionsInList && !isGeneratingQuestions && (
+                                    canPromptGenerateQuestionsFromCvJd ? (
+                                        <div className="mobile-question-generate-stack">
+                                            <button
+                                                type="button"
+                                                className="btn ghost question-next-btn two-line-btn"
+                                                onClick={openCvJdModal}
+                                                disabled={isImportQuestionDisabled}
+                                                title="Review or update CV and JD details"
+                                            >
+                                                <span className="question-nav-label">
+                                                    Input JD/CV
+                                                </span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="btn question-next-btn question-generate-btn two-line-btn"
+                                                onClick={generateQuestionsInBackground}
+                                                disabled={isImportQuestionDisabled}
+                                                title="Generate questions in the background"
+                                            >
+                                                <span className="question-nav-label">
+                                                    Generate
+                                                    <br />
+                                                    Questions
+                                                </span>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="btn ghost question-next-btn two-line-btn"
+                                            onClick={openCvJdModal}
+                                            disabled={isImportQuestionDisabled}
+                                            title="Add CV and JD details first"
+                                        >
+                                            <span className="question-nav-label">
+                                                Add JD and CV
+                                                <br />
+                                                information
+                                            </span>
+                                        </button>
+                                    )
+                                )}
+                            </div>
+                        )}
+
+                        {!isDesktopViewport && isPracticeMode && (
+                            <div className="practice-mobile-secondary-actions">
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={() => {
+                                        closeSummaryModal()
+                                        closeCvJdModal()
+                                        closePreviousAnswersModal()
+                                        setQuestionsDrawerOpen((prev) => !prev)
+                                    }}
+                                    aria-expanded={questionsDrawerOpen}
+                                    aria-controls="questions-modal"
+                                    disabled={isGeneratingQuestions}
+                                    title={
+                                        isGeneratingQuestions
+                                            ? 'Generating questions...'
+                                            : questionsDrawerOpen
+                                                ? 'Hide questions list modal'
+                                                : 'Show questions list modal'
+                                    }
+                                >
+                                    Questions List
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={() => {
+                                        if (summaryModalOpen) {
+                                            closeSummaryModal()
+                                            return
+                                        }
+
+                                        closeCvJdModal()
+                                        closePreviousAnswersModal()
+                                        setQuestionsDrawerOpen(false)
+                                        openSummaryModal()
+                                    }}
+                                    aria-expanded={summaryModalOpen}
+                                    aria-controls="summary-modal"
+                                    disabled={isSummaryViewDisabled}
+                                    title={
+                                        summaryModalOpen
+                                            ? 'Hide answer summary modal'
+                                            : 'Show answer summary modal'
+                                    }
+                                >
+                                    Answer Summary
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn"
+                                    onClick={() => {
+                                        void generateCombinedInterviewReports()
+                                    }}
+                                    disabled={
+                                        isGeneratingAmReport ||
+                                        isGeneratingDetailedReport ||
+                                        !interviewSummaries.length
+                                    }
+                                    title={
+                                        interviewSummaries.length
+                                            ? 'Generate reports sequentially and review both PDFs side-by-side'
+                                            : 'Answer a question first to generate reports.'
+                                    }
+                                >
+                                    {(isGeneratingAmReport || isGeneratingDetailedReport)
+                                        ? 'Generating Reports...'
+                                        : 'Generate Reports'}
+                                </button>
+                            </div>
+                        )}
 
                         {!isPracticeMode && (
                             <div className="actions wrap mock-interview-actions">
@@ -6766,7 +7065,7 @@ function App() {
                                                             ? 'Start mock interview first.'
                                                             : isMockInterviewStarted || isImportQuestionDisabled
                                                                 ? 'End the interview first before generating reports.'
-                                                                : 'Generate reports sequentially (Detailed first, then AM).'
+                                                                : 'Generate reports sequentially.'
                                             }
                                         >
                                             <span>Generate Reports</span>
@@ -7923,44 +8222,6 @@ function App() {
                         </div>
                         <div className="settings-modal-body">
                             <div className="settings-section">
-                                <label className="label interview-mode-label">Interview Mode</label>
-                                <div className="camera-mode-toggle" role="group" aria-label="Interview mode">
-                                    <button
-                                        type="button"
-                                        className={`btn camera-mode-toggle-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE ? ' is-active' : ' ghost'}`}
-                                        onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_PRACTICE)}
-                                        aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE}
-                                    >
-                                        Practice Mode
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={`btn camera-mode-toggle-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? ' is-active' : ' ghost'}`}
-                                        onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW)}
-                                        aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW}
-                                    >
-                                        Mock Interview Mode
-                                    </button>
-                                </div>
-                                <div className="camera-mode-toggle settings-mode-shortcuts">
-                                    <button
-                                        type="button"
-                                        className="btn ghost camera-mode-toggle-btn"
-                                        onClick={openLocalStoragePreviousAnswersFromSettings}
-                                    >
-                                        View Previous Answers
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn ghost camera-mode-toggle-btn"
-                                        onClick={openSessionSummaryFromSettings}
-                                    >
-                                        View Session Summary
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="settings-section">
                                 <h3 className="settings-section-title">Speech &amp; Transcription</h3>
                                 <label htmlFor="deepgram-key" className="label label-with-link">
                                     <span>Deepgram API Key</span>
@@ -8400,13 +8661,6 @@ function App() {
                                         >
                                             {recordingsFolderName ? 'Change Save Folder' : 'Select Save Folder'}
                                         </button>
-                                        <button
-                                            type="button"
-                                            className="btn ghost"
-                                            onClick={openLocalStoragePreviousAnswersFromSettings}
-                                        >
-                                            View Previous Answers
-                                        </button>
                                         {recordingsFolderName && (
                                             <button
                                                 type="button"
@@ -8495,7 +8749,7 @@ function App() {
                         aria-labelledby="combined-report-stream-title"
                     >
                         <div className="history-modal-header">
-                            <h2 id="combined-report-stream-title">Generating Reports (Detailed to AM)</h2>
+                            <h2 id="combined-report-stream-title">Generating Reports...</h2>
                             <div className="summary-header-actions">
                                 <button
                                     type="button"

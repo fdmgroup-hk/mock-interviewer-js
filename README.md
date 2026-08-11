@@ -2,12 +2,25 @@
 
 Mock Interviewer is a React + Vite web app for practicing interview answers with live camera posture cues, audio/video recording, and Deepgram-powered transcription.
 
-Current app version: 1.10.12
+Current app version: 1.10.21
 
 ## Highlights
 
 - Deepgram BYOK settings with local key persistence and optional server-side validation endpoint
 - LLM model dropdown labels now include model path values in brackets for faster endpoint verification
+- AM report prompt templates now exclude overall score requirements/output
+- Report generation now reliably opens the feedback Microsoft Forms tab after auto-download by reserving the tab during the user click flow
+- NVIDIA NIM default report-model routing now uses Nano Omni for Detailed reports and Ultra 550B A55B for AM reports
+- NVIDIA NIM model presets now include explicit Nano Omni and Ultra 550B A55B selectable options, with a dedicated `Default model` selection and consistent descriptive labels
+- Combined report completion now auto-downloads both generated PDFs (Detailed + AM)
+- Combined report completion now opens the feedback Microsoft Forms link in a new browser tab
+- Combined report generation modal title now shows `Generating Reports...`
+- Detailed report stream now renders live formatted markdown output while generation is in progress
+- Detailed and AM report stream previews are now both non-selectable
+- Detailed question headings are now normalized from malformed patterns like `### ### Question1:` to `### Question 1:`
+- Report PDF `Generated:` metadata row now includes the LLM provider and model used
+- Interview Mode controls were removed from Settings; mode switching remains in the topbar
+- Desktop/mobile practice control layout was stabilized by separating mobile-only controls from desktop recording controls
 - Curated 3-option preset model lists (plus Custom) for OpenRouter and NVIDIA NIM, including `inclusionai/ling-3.0-flash:free`
 - LLM provider HTTP errors now show provider name, status code, and truncated message in a 10-second notification
 - Live MediaPipe face analysis with eye-contact and gaze feedback metrics

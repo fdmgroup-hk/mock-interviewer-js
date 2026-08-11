@@ -19,6 +19,70 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.21] - 2026-08-11
+
+### Changed
+- Updated the Detailed Report streaming panel to render live formatted markdown output as chunks arrive.
+
+### Fixed
+- Disabled text selection in the Detailed Report stream panel so both AM and Detailed previews are non-selectable.
+- Normalized malformed detailed question headings such as `### ### Question1:` into canonical `### Question 1:` formatting.
+
+## [1.10.20] - 2026-08-11
+
+### Changed
+- Updated report PDF header metadata so the `Generated:` row now includes the LLM provider and model used for that report.
+
+### Fixed
+- Enabled text selection in the Detailed Report streaming output box while keeping AM report preview non-selectable.
+
+## [1.10.19] - 2026-08-11
+
+### Changed
+- Updated the Detailed Report streaming preview to remain raw plain text during and after generation (no markdown rendering pass).
+
+## [1.10.18] - 2026-08-11
+
+### Changed
+- Updated the combined report generation modal title from `Generating Reports (Detailed to AM)` to `Generating Reports...`.
+
+## [1.10.17] - 2026-08-11
+
+### Changed
+- Updated NVIDIA NIM model dropdown labels to logical selection names, including a dedicated `Default model` option and consistent descriptive model labels.
+
+### Fixed
+- Fixed NVIDIA NIM model dropdown option visibility so `Nano Omni` remains visible/selectable instead of being deduplicated under the default selection value.
+
+## [1.10.16] - 2026-08-11
+
+### Changed
+- Updated NVIDIA NIM report-generation defaults to use `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` for Detailed reports and `nvidia/nemotron-3-ultra-550b-a55b` for AM reports when using default model selection.
+- Updated model preset labeling from `Default Model` to `Default Models`, and exposed Nano Omni as an explicit selectable NVIDIA NIM model option.
+
+### Fixed
+- Fixed feedback-form popup reliability after report generation by reserving a browser tab during the user click flow, then redirecting it to the Microsoft Forms URL after auto-download completes.
+
+## [1.10.15] - 2026-08-11
+
+### Changed
+- Updated AM report generation prompts to exclude score sections/output (removed overall score requirements from AM prompt templates).
+
+## [1.10.14] - 2026-08-11
+
+### Changed
+- After combined report generation completes, the app now auto-downloads both generated PDFs (Detailed + AM).
+- After both reports are generated, the app now opens the configured Microsoft Forms feedback link in a new browser tab.
+
+## [1.10.13] - 2026-08-11
+
+### Changed
+- Removed the `Interview Mode` section from the Settings modal; mode switching remains available from the topbar controls.
+- Removed top padding from `.layout.center-camera-layout` to tighten centered camera layout spacing.
+
+### Fixed
+- Fixed desktop layout regressions by separating mobile-only practice question controls from desktop recording-row controls.
+
 ## [1.10.12] - 2026-08-10
 
 ### Fixed
