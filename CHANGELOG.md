@@ -19,6 +19,14 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.17] - 2026-08-11
+
+### Changed
+- Updated NVIDIA NIM model dropdown labels to logical selection names, including a dedicated `Default model` option and consistent descriptive model labels.
+
+### Fixed
+- Fixed NVIDIA NIM model dropdown option visibility so `Nano Omni` remains visible/selectable instead of being deduplicated under the default selection value.
+
 ## [1.10.16] - 2026-08-11
 
 ### Changed

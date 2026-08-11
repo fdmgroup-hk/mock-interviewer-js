@@ -135,10 +135,12 @@ const UNSAVED_QA_WARNING_MESSAGE =
 const POST_REPORT_FEEDBACK_FORM_URL =
     'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=glOkWCW86EGcIlkUGYi-mnE0rK0SAJ9DlEqB6Zp22mxUQzYxQkdBRlZYVjJQQzlWTE9OTDdSQ0RWTC4u'
 const CUSTOM_MODEL_OPTION_VALUE = '__custom__'
+const DEFAULT_OPENROUTER_MODEL_OPTION_VALUE = '__default_openrouter_model__'
+const DEFAULT_NIM_MODEL_OPTION_VALUE = '__default_nim_model__'
 const OPENROUTER_MODEL_PRESETS = [
     {
-        value: LLM_PROVIDER_ENV_CONFIG.openrouter.model,
-        label: `Default Models [${LLM_PROVIDER_ENV_CONFIG.openrouter.model}]`,
+        value: DEFAULT_OPENROUTER_MODEL_OPTION_VALUE,
+        label: 'Default model',
     },
     {
         value: 'nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -151,8 +153,8 @@ const OPENROUTER_MODEL_PRESETS = [
 ]
 const NIM_MODEL_PRESETS = [
     {
-        value: LLM_PROVIDER_ENV_CONFIG.nim.model,
-        label: `Default Models [${LLM_PROVIDER_ENV_CONFIG.nim.model}]`,
+        value: DEFAULT_NIM_MODEL_OPTION_VALUE,
+        label: 'Default model',
     },
     {
         value: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
@@ -1820,17 +1822,21 @@ function App() {
             getSavedValue(STORAGE_NIM_MODEL) || LLM_PROVIDER_ENV_CONFIG.nim.model
         const persistedNimBaseUrl = getSavedValue(STORAGE_NIM_BASE_URL) || DEFAULT_NIM_BASE_URL
 
-        const initialOpenrouterCustomModelInput = OPENROUTER_MODEL_PRESETS.some(
-            (preset) => preset.value === String(persistedOpenrouterModel || '').trim(),
-        )
+        const normalizedPersistedOpenrouterModel = String(persistedOpenrouterModel || '').trim()
+        const initialOpenrouterCustomModelInput =
+            normalizedPersistedOpenrouterModel === LLM_PROVIDER_ENV_CONFIG.openrouter.model ||
+            OPENROUTER_MODEL_PRESETS.some(
+                (preset) => preset.value === normalizedPersistedOpenrouterModel,
+            )
             ? ''
-            : String(persistedOpenrouterModel || '').trim()
+            : normalizedPersistedOpenrouterModel
 
-        const initialNimCustomModelInput = NIM_MODEL_PRESETS.some(
-            (preset) => preset.value === String(persistedNimModel || '').trim(),
-        )
+        const normalizedPersistedNimModel = String(persistedNimModel || '').trim()
+        const initialNimCustomModelInput =
+            normalizedPersistedNimModel === LLM_PROVIDER_ENV_CONFIG.nim.model ||
+            NIM_MODEL_PRESETS.some((preset) => preset.value === normalizedPersistedNimModel)
             ? ''
-            : String(persistedNimModel || '').trim()
+            : normalizedPersistedNimModel
 
         return {
             llmProviderMode: persistedLlmProviderMode,
@@ -1906,15 +1912,27 @@ function App() {
         [],
     )
 
-    const openrouterModelSelectValue = useMemo(
-        () => getModelSelectValue(openrouterModelInput, OPENROUTER_MODEL_PRESETS, CUSTOM_MODEL_OPTION_VALUE),
-        [openrouterModelInput],
-    )
+    const openrouterModelSelectValue = useMemo(() => {
+        const normalizedCurrent = String(openrouterModelInput || '').trim()
+        if (!normalizedCurrent) return CUSTOM_MODEL_OPTION_VALUE
+        if (normalizedCurrent === LLM_PROVIDER_ENV_CONFIG.openrouter.model) {
+            return DEFAULT_OPENROUTER_MODEL_OPTION_VALUE
+        }
+        return getModelSelectValue(
+            normalizedCurrent,
+            OPENROUTER_MODEL_PRESETS,
+            CUSTOM_MODEL_OPTION_VALUE,
+        )
+    }, [openrouterModelInput])
 
-    const nimModelSelectValue = useMemo(
-        () => getModelSelectValue(nimModelInput, NIM_MODEL_PRESETS, CUSTOM_MODEL_OPTION_VALUE),
-        [nimModelInput],
-    )
+    const nimModelSelectValue = useMemo(() => {
+        const normalizedCurrent = String(nimModelInput || '').trim()
+        if (!normalizedCurrent) return CUSTOM_MODEL_OPTION_VALUE
+        if (normalizedCurrent === LLM_PROVIDER_ENV_CONFIG.nim.model) {
+            return DEFAULT_NIM_MODEL_OPTION_VALUE
+        }
+        return getModelSelectValue(normalizedCurrent, NIM_MODEL_PRESETS, CUSTOM_MODEL_OPTION_VALUE)
+    }, [nimModelInput])
 
     const needsRevalidation = useMemo(() => {
         if (!lastValidatedAt) return false
@@ -4575,7 +4593,8 @@ function App() {
         setOpenrouterApiKeyInput(openrouterApiKey)
         setOpenrouterModelInput(openrouterModel)
         setOpenrouterCustomModelInput(
-            OPENROUTER_MODEL_PRESETS.some((preset) => preset.value === openrouterModel)
+            openrouterModel === LLM_PROVIDER_ENV_CONFIG.openrouter.model ||
+                OPENROUTER_MODEL_PRESETS.some((preset) => preset.value === openrouterModel)
                 ? ''
                 : openrouterModel,
         )
@@ -4583,7 +4602,8 @@ function App() {
         setNimModelInput(nimModel)
         setNimBaseUrlInput(nimBaseUrl)
         setNimCustomModelInput(
-            NIM_MODEL_PRESETS.some((preset) => preset.value === nimModel)
+            nimModel === LLM_PROVIDER_ENV_CONFIG.nim.model ||
+                NIM_MODEL_PRESETS.some((preset) => preset.value === nimModel)
                 ? ''
                 : nimModel,
         )
@@ -4750,12 +4770,22 @@ function App() {
             return
         }
 
+        if (nextValue === DEFAULT_OPENROUTER_MODEL_OPTION_VALUE) {
+            setOpenrouterModelInput(LLM_PROVIDER_ENV_CONFIG.openrouter.model)
+            return
+        }
+
         setOpenrouterModelInput(nextValue)
     }
 
     function handleNimModelSelection(nextValue) {
         if (nextValue === CUSTOM_MODEL_OPTION_VALUE) {
             setNimModelInput(nimCustomModelInput.trim())
+            return
+        }
+
+        if (nextValue === DEFAULT_NIM_MODEL_OPTION_VALUE) {
+            setNimModelInput(LLM_PROVIDER_ENV_CONFIG.nim.model)
             return
         }
 
