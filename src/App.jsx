@@ -8708,7 +8708,7 @@ function App() {
                         aria-labelledby="combined-report-stream-title"
                     >
                         <div className="history-modal-header">
-                            <h2 id="combined-report-stream-title">Generating Reports (Detailed to AM)</h2>
+                            <h2 id="combined-report-stream-title">Generating Reports...</h2>
                             <div className="summary-header-actions">
                                 <button
                                     type="button"

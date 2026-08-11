@@ -19,6 +19,11 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.18] - 2026-08-11
+
+### Changed
+- Updated the combined report generation modal title from `Generating Reports (Detailed to AM)` to `Generating Reports...`.
+
 ## [1.10.17] - 2026-08-11
 
 ### Changed
