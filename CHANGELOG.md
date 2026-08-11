@@ -19,6 +19,15 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.16] - 2026-08-11
+
+### Changed
+- Updated NVIDIA NIM report-generation defaults to use `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` for Detailed reports and `nvidia/nemotron-3-ultra-550b-a55b` for AM reports when using default model selection.
+- Updated model preset labeling from `Default Model` to `Default Models`, and exposed Nano Omni as an explicit selectable NVIDIA NIM model option.
+
+### Fixed
+- Fixed feedback-form popup reliability after report generation by reserving a browser tab during the user click flow, then redirecting it to the Microsoft Forms URL after auto-download completes.
+
 ## [1.10.15] - 2026-08-11
 
 ### Changed

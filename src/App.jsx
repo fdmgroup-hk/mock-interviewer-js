@@ -125,6 +125,8 @@ const DETAILED_REPORT_USER_MESSAGE =
 const LLM_PROVIDER_ENV_CONFIG = getLlmProviderConfig(import.meta.env)
 const OPENROUTER_BASE_URL = LLM_PROVIDER_ENV_CONFIG.openrouter.baseUrl
 const DEFAULT_NIM_BASE_URL = LLM_PROVIDER_ENV_CONFIG.nim.baseUrl
+const DEFAULT_NIM_DETAILED_REPORT_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
+const DEFAULT_NIM_AM_REPORT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b'
 const LLM_HTTP_ERROR_TOAST_PREFIX = 'LLM API HTTP error:'
 const LLM_HTTP_ERROR_TOAST_TIMEOUT_MS = 10000
 const LLM_HTTP_ERROR_MESSAGE_MAX_LENGTH = 180
@@ -136,7 +138,7 @@ const CUSTOM_MODEL_OPTION_VALUE = '__custom__'
 const OPENROUTER_MODEL_PRESETS = [
     {
         value: LLM_PROVIDER_ENV_CONFIG.openrouter.model,
-        label: `Default Model [${LLM_PROVIDER_ENV_CONFIG.openrouter.model}]`,
+        label: `Default Models [${LLM_PROVIDER_ENV_CONFIG.openrouter.model}]`,
     },
     {
         value: 'nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -150,7 +152,15 @@ const OPENROUTER_MODEL_PRESETS = [
 const NIM_MODEL_PRESETS = [
     {
         value: LLM_PROVIDER_ENV_CONFIG.nim.model,
-        label: `Default Model [${LLM_PROVIDER_ENV_CONFIG.nim.model}]`,
+        label: `Default Models [${LLM_PROVIDER_ENV_CONFIG.nim.model}]`,
+    },
+    {
+        value: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+        label: 'NVIDIA Nemotron 3 Nano Omni 30B A3B Reasoning [nvidia/nemotron-3-nano-omni-30b-a3b-reasoning]',
+    },
+    {
+        value: 'nvidia/nemotron-3-ultra-550b-a55b',
+        label: 'NVIDIA Nemotron 3 Ultra 550B A55B [nvidia/nemotron-3-ultra-550b-a55b]',
     },
     {
         value: 'openai/gpt-oss-120b',
@@ -3144,6 +3154,24 @@ function App() {
         return providerCandidates
     }
 
+    function resolveReportProviderModel(providerConfig, reportType) {
+        if (providerConfig.providerId !== 'nim') {
+            return providerConfig.model
+        }
+
+        const configuredModel = String(providerConfig.model || '').trim()
+        const defaultNimModel = String(LLM_PROVIDER_ENV_CONFIG.nim.model || '').trim()
+
+        // Only apply split defaults when user is still on the shared default model.
+        if (configuredModel && configuredModel !== defaultNimModel) {
+            return configuredModel
+        }
+
+        return reportType === 'am'
+            ? DEFAULT_NIM_AM_REPORT_MODEL
+            : DEFAULT_NIM_DETAILED_REPORT_MODEL
+    }
+
     function showLlmProviderMissingKeyToast() {
         if (llmProviderMode === LLM_PROVIDER_MODE_OPENROUTER_ONLY) {
             setToast('OpenRouter API key is required for OpenRouter only mode.')
@@ -3347,6 +3375,13 @@ function App() {
             return
         }
 
+        // Reserve a tab during the direct user gesture to avoid popup blocking later.
+        const reservedFeedbackTab = window.open('', '_blank')
+        if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
+            reservedFeedbackTab.document.title = 'Opening feedback form...'
+            reservedFeedbackTab.document.body.textContent = 'Preparing reports. This tab will open the feedback form automatically.'
+        }
+
         const summaryMarkdown = buildAnswerSummaryMarkdown(
             interviewSummaries,
             overallInterviewSummary,
@@ -3401,7 +3436,7 @@ function App() {
                         result = await sendInterviewChatMessage({
                             providerId: providerConfig.providerId,
                             apiKey: providerConfig.apiKey,
-                            model: providerConfig.model,
+                            model: resolveReportProviderModel(providerConfig, 'detailed'),
                             baseUrl: providerConfig.baseUrl,
                             userMessage: DETAILED_REPORT_USER_MESSAGE,
                             context: {
@@ -3485,7 +3520,7 @@ function App() {
                         result = await sendInterviewChatMessage({
                             providerId: providerConfig.providerId,
                             apiKey: providerConfig.apiKey,
-                            model: providerConfig.model,
+                            model: resolveReportProviderModel(providerConfig, 'am'),
                             baseUrl: providerConfig.baseUrl,
                             userMessage: AM_REPORT_USER_MESSAGE,
                             context: {
@@ -3570,11 +3605,17 @@ function App() {
                 amResult.pdfDocument.fileName || 'am-feedback-report.pdf',
             )
 
-            const feedbackTab = window.open(
-                POST_REPORT_FEEDBACK_FORM_URL,
-                '_blank',
-                'noopener,noreferrer',
-            )
+            let feedbackTab = null
+            if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
+                reservedFeedbackTab.location.href = POST_REPORT_FEEDBACK_FORM_URL
+                feedbackTab = reservedFeedbackTab
+            } else {
+                feedbackTab = window.open(
+                    POST_REPORT_FEEDBACK_FORM_URL,
+                    '_blank',
+                    'noopener,noreferrer',
+                )
+            }
 
             setCombinedReportModalOpen(false)
             setCombinedReportPdfPreviewOpen(true)
@@ -3584,6 +3625,10 @@ function App() {
                 setToast('Detailed and AM PDFs downloaded. Please allow pop-ups to open the feedback form.')
             }
         } catch (error) {
+            if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
+                reservedFeedbackTab.close()
+            }
+
             setCombinedReportModalOpen(false)
 
             if (hasDetailedPdf || hasAmPdf) {
