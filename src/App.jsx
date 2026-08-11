@@ -842,6 +842,8 @@ async function downloadInterviewReportPdf({
     consultantFullName,
     jobTitle,
     feedbackText,
+    llmProviderLabel,
+    llmModel,
     reportTitle = 'Account Manager Interview Feedback Report',
     feedbackSectionTitle = 'AM Feedback Output',
     fileNamePrefix = 'interview-report',
@@ -1443,6 +1445,8 @@ async function downloadInterviewReportPdf({
     const safeCompanyName = companyName || 'Unknown company'
     const safeConsultantFullName = consultantFullName || '(not provided)'
     const safeJobTitle = jobTitle || '(not provided)'
+    const safeLlmProviderLabel = sanitizeDisplayText(llmProviderLabel, '(unknown provider)')
+    const safeLlmModel = sanitizeDisplayText(llmModel, '(unknown model)')
     const safeFeedbackMarkdown = sanitizeMarkdownForPdf(
         String(feedbackText || '(no feedback output)').replace(/<[^>]*>/g, ''),
     )
@@ -1452,7 +1456,7 @@ async function downloadInterviewReportPdf({
         fontStyle: 'bold',
         spacingAfter: 4,
     })
-    writeTextBlock(`Generated: ${displayStamp}`, {
+    writeTextBlock(`Generated: ${displayStamp} | LLM Provider: ${safeLlmProviderLabel} | LLM Model: ${safeLlmModel}`, {
         fontSize: 10,
         spacingAfter: 2,
     })
@@ -3432,6 +3436,8 @@ function App() {
         const generateDetailedTask = async () => {
             let result = null
             let lastError = null
+            let usedProviderLabel = ''
+            let usedModel = ''
             const controller = new AbortController()
             detailedReportAbortControllerRef.current = controller
 
@@ -3449,12 +3455,13 @@ function App() {
                     const providerLabel = getLlmProviderUsageLabel(providerConfig.providerId)
                     const providerUsageMessage = `Generating Detailed Report, LLM API used: ${providerLabel}`
                     console.info(providerUsageMessage)
+                    const resolvedModel = resolveReportProviderModel(providerConfig, 'detailed')
 
                     try {
                         result = await sendInterviewChatMessage({
                             providerId: providerConfig.providerId,
                             apiKey: providerConfig.apiKey,
-                            model: resolveReportProviderModel(providerConfig, 'detailed'),
+                            model: resolvedModel,
                             baseUrl: providerConfig.baseUrl,
                             userMessage: DETAILED_REPORT_USER_MESSAGE,
                             context: {
@@ -3474,6 +3481,8 @@ function App() {
                             },
                             signal: controller.signal,
                         })
+                        usedProviderLabel = providerLabel
+                        usedModel = resolvedModel
                         break
                     } catch (error) {
                         if (error?.code === 'request-aborted') {
@@ -3498,6 +3507,8 @@ function App() {
                     consultantFullName,
                     jobTitle,
                     feedbackText: normalizedDetailedPdfMarkdown,
+                    llmProviderLabel: usedProviderLabel,
+                    llmModel: usedModel,
                     reportTitle: 'Detailed Interview Report',
                     feedbackSectionTitle: 'Detailed Feedback Output',
                     fileNamePrefix: 'detailed-interview-report',
@@ -3516,6 +3527,8 @@ function App() {
         const generateAmTask = async (detailedReportText) => {
             let result = null
             let lastError = null
+            let usedProviderLabel = ''
+            let usedModel = ''
             const controller = new AbortController()
             amReportAbortControllerRef.current = controller
 
@@ -3533,12 +3546,13 @@ function App() {
                     const providerLabel = getLlmProviderUsageLabel(providerConfig.providerId)
                     const providerUsageMessage = `Generating AM Report, LLM API used: ${providerLabel}`
                     console.info(providerUsageMessage)
+                    const resolvedModel = resolveReportProviderModel(providerConfig, 'am')
 
                     try {
                         result = await sendInterviewChatMessage({
                             providerId: providerConfig.providerId,
                             apiKey: providerConfig.apiKey,
-                            model: resolveReportProviderModel(providerConfig, 'am'),
+                            model: resolvedModel,
                             baseUrl: providerConfig.baseUrl,
                             userMessage: AM_REPORT_USER_MESSAGE,
                             context: {
@@ -3558,6 +3572,8 @@ function App() {
                             },
                             signal: controller.signal,
                         })
+                        usedProviderLabel = providerLabel
+                        usedModel = resolvedModel
                         break
                     } catch (error) {
                         if (error?.code === 'request-aborted') {
@@ -3577,6 +3593,8 @@ function App() {
                     consultantFullName,
                     jobTitle,
                     feedbackText: result.text,
+                    llmProviderLabel: usedProviderLabel,
+                    llmModel: usedModel,
                     reportTitle: 'Account Manager Interview Feedback Report',
                     feedbackSectionTitle: 'AM Feedback Output',
                     fileNamePrefix: 'am-feedback-report',
@@ -8733,7 +8751,7 @@ function App() {
                                 <div className="combined-report-stream-panel">
                                     <h3>Detailed Report</h3>
                                     <div className="question-modal-inner am-report-stream-inner" ref={detailedReportPreviewScrollRef}>
-                                        <div className="am-report-stream-content no-select">
+                                        <div className="am-report-stream-content">
                                             <pre className="am-report-stream-content-raw">
                                                 {detailedReportMarkdownPreview || 'Generating detailed report...'}
                                             </pre>

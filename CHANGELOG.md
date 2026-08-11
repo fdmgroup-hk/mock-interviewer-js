@@ -19,6 +19,14 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.20] - 2026-08-11
+
+### Changed
+- Updated report PDF header metadata so the `Generated:` row now includes the LLM provider and model used for that report.
+
+### Fixed
+- Enabled text selection in the Detailed Report streaming output box while keeping AM report preview non-selectable.
+
 ## [1.10.19] - 2026-08-11
 
 ### Changed

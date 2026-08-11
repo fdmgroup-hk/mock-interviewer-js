@@ -1996,6 +1996,8 @@ h3 {
     word-break: break-word;
     font: inherit;
     line-height: inherit;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .am-report-stream-content :is(p, ul, ol, li, h1, h2, h3, h4, h5, h6, pre, code, blockquote) {

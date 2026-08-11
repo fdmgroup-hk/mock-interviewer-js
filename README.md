@@ -2,7 +2,7 @@
 
 Mock Interviewer is a React + Vite web app for practicing interview answers with live camera posture cues, audio/video recording, and Deepgram-powered transcription.
 
-Current app version: 1.10.19
+Current app version: 1.10.20
 
 ## Highlights
 
@@ -15,7 +15,9 @@ Current app version: 1.10.19
 - Combined report completion now auto-downloads both generated PDFs (Detailed + AM)
 - Combined report completion now opens the feedback Microsoft Forms link in a new browser tab
 - Combined report generation modal title now shows `Generating Reports...`
+- Report PDF `Generated:` metadata row now includes the LLM provider and model used
 - Detailed report streaming preview now stays as raw plain text during and after generation (no markdown formatting)
+- Detailed report streaming output text is selectable for quick copy/paste
 - Interview Mode controls were removed from Settings; mode switching remains in the topbar
 - Desktop/mobile practice control layout was stabilized by separating mobile-only controls from desktop recording controls
 - Curated 3-option preset model lists (plus Custom) for OpenRouter and NVIDIA NIM, including `inclusionai/ling-3.0-flash:free`
