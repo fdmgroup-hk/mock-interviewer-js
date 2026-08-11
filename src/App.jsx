@@ -2398,27 +2398,6 @@ function App() {
         setHistoryModalOpen(true)
     }
 
-    async function openLocalStoragePreviousAnswersFromSettings() {
-        setPreviousAnswersSource(PREVIOUS_ANSWERS_SOURCE_LOCAL_STORAGE)
-
-        const items = await loadPreviousAnswersFromLocalStorage()
-        if (!items.length) {
-            setHistoryModalOpen(true)
-            setSelectedPreviousAnswerId('')
-            replaceHistoryMediaUrls({ audioUrl: '', videoUrl: '' })
-            return
-        }
-
-        const firstItem = items[0]
-        setSelectedPreviousAnswerId(firstItem.id)
-        await loadHistoryMedia(firstItem)
-        setHistoryModalOpen(true)
-    }
-
-    function openSessionSummaryFromSettings() {
-        openSummaryModal()
-    }
-
     // Keep dependencies minimal here to avoid callback identity churn from custom hook setters.
     const closePreviousAnswersModal = useCallback(() => {
         setHistoryModalOpen(false)
@@ -6158,6 +6137,26 @@ function App() {
                         <h1>Mock Interviewer</h1>
                         <span className="topbar-version-label">v{APP_VERSION}</span>
                     </div>
+                    <div className="topbar-mode-center">
+                        <div className="camera-mode-toggle topbar-mode-toggle" role="group" aria-label="Interview mode">
+                            <button
+                                type="button"
+                                className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE ? ' is-active' : ' ghost'}`}
+                                onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_PRACTICE)}
+                                aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE}
+                            >
+                                Practice Mode
+                            </button>
+                            <button
+                                type="button"
+                                className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? ' is-active' : ' ghost'}`}
+                                onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW)}
+                                aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW}
+                            >
+                                Mock Interview Mode
+                            </button>
+                        </div>
+                    </div>
                     <div className="topbar-actions">
                         <button
                             type="button"
@@ -7942,22 +7941,6 @@ function App() {
                                         Mock Interview Mode
                                     </button>
                                 </div>
-                                <div className="camera-mode-toggle settings-mode-shortcuts">
-                                    <button
-                                        type="button"
-                                        className="btn ghost camera-mode-toggle-btn"
-                                        onClick={openLocalStoragePreviousAnswersFromSettings}
-                                    >
-                                        View Previous Answers
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn ghost camera-mode-toggle-btn"
-                                        onClick={openSessionSummaryFromSettings}
-                                    >
-                                        View Session Summary
-                                    </button>
-                                </div>
                             </div>
 
                             <div className="settings-section">
@@ -8399,13 +8382,6 @@ function App() {
                                             disabled={isFolderFeatureDisabled}
                                         >
                                             {recordingsFolderName ? 'Change Save Folder' : 'Select Save Folder'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="btn ghost"
-                                            onClick={openLocalStoragePreviousAnswersFromSettings}
-                                        >
-                                            View Previous Answers
                                         </button>
                                         {recordingsFolderName && (
                                             <button

@@ -135,6 +135,35 @@ h1 {
     gap: 0.4rem;
 }
 
+.topbar-mode-center {
+    display: flex;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.topbar-mode-toggle {
+    width: auto;
+    grid-template-columns: auto auto;
+    margin-bottom: 0;
+}
+
+.topbar-mode-btn {
+    width: auto;
+    min-height: 1.5rem;
+    padding: 0.4rem 0.7rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+.topbar-mode-btn.is-active {
+    border-color: color-mix(in srgb, var(--action), black 12%);
+    box-shadow: 0 8px 18px var(--shadow-soft);
+}
+
 .topbar-version-label {
     color: color-mix(in srgb, var(--ink-700), #8a8a8a 35%);
     font-size: 0.6rem;
@@ -163,6 +192,7 @@ h3 {
     display: inline-flex;
     align-items: center;
     gap: 0.42rem;
+    flex: 0 0 auto;
 }
 
 .topbar-icon {
@@ -221,7 +251,6 @@ h3 {
     grid-template-columns: 1fr 1fr;
     gap: 0.55rem;
     width: 100%;
-    margin-bottom: 0.65rem;
 }
 
 .camera-mode-toggle-btn {
@@ -232,10 +261,6 @@ h3 {
 .camera-mode-toggle-btn.is-active {
     border-color: color-mix(in srgb, var(--action), black 12%);
     box-shadow: 0 8px 18px var(--shadow-soft);
-}
-
-.settings-mode-shortcuts {
-    margin-bottom: 0;
 }
 
 .panel.session {
@@ -3021,6 +3046,15 @@ h3 {
     .topbar-inner {
         align-items: center;
         gap: 0.65rem;
+    }
+
+    .topbar-mode-center {
+        width: auto;
+    }
+
+    .topbar-mode-toggle {
+        width: auto;
+        max-width: none;
     }
 
     .actions {
