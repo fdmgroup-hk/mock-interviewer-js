@@ -19,6 +19,21 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.14] - 2026-08-11
+
+### Changed
+- After combined report generation completes, the app now auto-downloads both generated PDFs (Detailed + AM).
+- After both reports are generated, the app now opens the configured Microsoft Forms feedback link in a new browser tab.
+
+## [1.10.13] - 2026-08-11
+
+### Changed
+- Removed the `Interview Mode` section from the Settings modal; mode switching remains available from the topbar controls.
+- Removed top padding from `.layout.center-camera-layout` to tighten centered camera layout spacing.
+
+### Fixed
+- Fixed desktop layout regressions by separating mobile-only practice question controls from desktop recording-row controls.
+
 ## [1.10.12] - 2026-08-10
 
 ### Fixed

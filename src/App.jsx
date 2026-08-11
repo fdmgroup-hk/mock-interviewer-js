@@ -130,6 +130,8 @@ const LLM_HTTP_ERROR_TOAST_TIMEOUT_MS = 10000
 const LLM_HTTP_ERROR_MESSAGE_MAX_LENGTH = 180
 const UNSAVED_QA_WARNING_MESSAGE =
     'Questions and Answer Summaries will not be saved. Please download the reports as needed.'
+const POST_REPORT_FEEDBACK_FORM_URL =
+    'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=glOkWCW86EGcIlkUGYi-mnE0rK0SAJ9DlEqB6Zp22mxUQzYxQkdBRlZYVjJQQzlWTE9OTDdSQ0RWTC4u'
 const CUSTOM_MODEL_OPTION_VALUE = '__custom__'
 const OPENROUTER_MODEL_PRESETS = [
     {
@@ -3559,9 +3561,28 @@ function App() {
             setAmReportPdfFileName(amResult.pdfDocument.fileName || 'am-feedback-report.pdf')
             hasAmPdf = true
 
+            downloadBlob(
+                detailedResult.pdfDocument.blob,
+                detailedResult.pdfDocument.fileName || 'detailed-interview-report.pdf',
+            )
+            downloadBlob(
+                amResult.pdfDocument.blob,
+                amResult.pdfDocument.fileName || 'am-feedback-report.pdf',
+            )
+
+            const feedbackTab = window.open(
+                POST_REPORT_FEEDBACK_FORM_URL,
+                '_blank',
+                'noopener,noreferrer',
+            )
+
             setCombinedReportModalOpen(false)
             setCombinedReportPdfPreviewOpen(true)
-            setToast('Detailed and AM PDFs ready. Review or download.')
+            if (feedbackTab) {
+                setToast('Detailed and AM PDFs downloaded. Feedback form opened in a new tab.')
+            } else {
+                setToast('Detailed and AM PDFs downloaded. Please allow pop-ups to open the feedback form.')
+            }
         } catch (error) {
             setCombinedReportModalOpen(false)
 
@@ -8084,28 +8105,6 @@ function App() {
                             </div>
                         </div>
                         <div className="settings-modal-body">
-                            <div className="settings-section">
-                                <label className="label interview-mode-label">Interview Mode</label>
-                                <div className="camera-mode-toggle" role="group" aria-label="Interview mode">
-                                    <button
-                                        type="button"
-                                        className={`btn camera-mode-toggle-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE ? ' is-active' : ' ghost'}`}
-                                        onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_PRACTICE)}
-                                        aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE}
-                                    >
-                                        Practice Mode
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={`btn camera-mode-toggle-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? ' is-active' : ' ghost'}`}
-                                        onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW)}
-                                        aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW}
-                                    >
-                                        Mock Interview Mode
-                                    </button>
-                                </div>
-                            </div>
-
                             <div className="settings-section">
                                 <h3 className="settings-section-title">Speech &amp; Transcription</h3>
                                 <label htmlFor="deepgram-key" className="label label-with-link">
