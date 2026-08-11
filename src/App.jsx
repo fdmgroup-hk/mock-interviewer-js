@@ -1825,18 +1825,18 @@ function App() {
         const normalizedPersistedOpenrouterModel = String(persistedOpenrouterModel || '').trim()
         const initialOpenrouterCustomModelInput =
             normalizedPersistedOpenrouterModel === LLM_PROVIDER_ENV_CONFIG.openrouter.model ||
-            OPENROUTER_MODEL_PRESETS.some(
-                (preset) => preset.value === normalizedPersistedOpenrouterModel,
-            )
-            ? ''
-            : normalizedPersistedOpenrouterModel
+                OPENROUTER_MODEL_PRESETS.some(
+                    (preset) => preset.value === normalizedPersistedOpenrouterModel,
+                )
+                ? ''
+                : normalizedPersistedOpenrouterModel
 
         const normalizedPersistedNimModel = String(persistedNimModel || '').trim()
         const initialNimCustomModelInput =
             normalizedPersistedNimModel === LLM_PROVIDER_ENV_CONFIG.nim.model ||
-            NIM_MODEL_PRESETS.some((preset) => preset.value === normalizedPersistedNimModel)
-            ? ''
-            : normalizedPersistedNimModel
+                NIM_MODEL_PRESETS.some((preset) => preset.value === normalizedPersistedNimModel)
+                ? ''
+                : normalizedPersistedNimModel
 
         return {
             llmProviderMode: persistedLlmProviderMode,
@@ -8734,7 +8734,9 @@ function App() {
                                     <h3>Detailed Report</h3>
                                     <div className="question-modal-inner am-report-stream-inner" ref={detailedReportPreviewScrollRef}>
                                         <div className="am-report-stream-content no-select">
-                                            <ReactMarkdown>{detailedReportMarkdownPreview || 'Generating detailed report...'}</ReactMarkdown>
+                                            <pre className="am-report-stream-content-raw">
+                                                {detailedReportMarkdownPreview || 'Generating detailed report...'}
+                                            </pre>
                                         </div>
                                     </div>
                                 </div>

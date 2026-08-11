@@ -19,6 +19,11 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.19] - 2026-08-11
+
+### Changed
+- Updated the Detailed Report streaming preview to remain raw plain text during and after generation (no markdown rendering pass).
+
 ## [1.10.18] - 2026-08-11
 
 ### Changed
