@@ -6919,6 +6919,33 @@ function App() {
                                                 </span>
                                             )}
                                     </button>
+                                    <button
+                                        type="button"
+                                        className="btn ghost mock-question-list-btn"
+                                        onClick={() => {
+                                            setQuestionsDrawerOpen((prev) => !prev)
+                                        }}
+                                        aria-expanded={questionsDrawerOpen}
+                                        aria-label={
+                                            questionsDrawerOpen
+                                                ? 'Hide Questions List'
+                                                : 'Show Questions List'
+                                        }
+                                        title={
+                                            questionsDrawerOpen
+                                                ? 'Hide the questions list.'
+                                                : 'Show the questions list.'
+                                        }
+                                    >
+                                        <span className="mock-question-list-label-desktop" aria-hidden="true">
+                                            <span>{questionsDrawerOpen ? 'Hide' : 'Show'}</span>
+                                            <span>Questions</span>
+                                            <span>List</span>
+                                        </span>
+                                        <span className="mock-question-list-label-mobile">
+                                            {questionsDrawerOpen ? 'Hide Questions List' : 'Show Questions List'}
+                                        </span>
+                                    </button>
                                 </div>
                                 <div className="mock-start-actions">
                                     <button
