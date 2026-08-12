@@ -19,6 +19,12 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.22] - 2026-08-12
+
+### Changed
+- Updated NVIDIA NIM default report-model routing so both Detailed and AM reports use `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` when `Default model` is selected.
+- Updated post-generation UX to remove automatic feedback tab/popup opening and instead show a `Fill in feedback` link in the `Report PDFs` header actions row.
+
 ## [1.10.21] - 2026-08-11
 
 ### Changed

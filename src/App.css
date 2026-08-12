@@ -651,6 +651,13 @@ h3 {
     transition: transform 160ms ease, filter 160ms ease, background-color 160ms ease;
 }
 
+a.btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .btn:hover {
     transform: translateY(-1px);
     filter: brightness(1.03);
