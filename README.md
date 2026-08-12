@@ -2,18 +2,19 @@
 
 Mock Interviewer is a React + Vite web app for practicing interview answers with live camera posture cues, audio/video recording, and Deepgram-powered transcription.
 
-Current app version: 1.10.21
+Current app version: 1.10.23
 
 ## Highlights
 
 - Deepgram BYOK settings with local key persistence and optional server-side validation endpoint
 - LLM model dropdown labels now include model path values in brackets for faster endpoint verification
 - AM report prompt templates now exclude overall score requirements/output
-- Report generation now reliably opens the feedback Microsoft Forms tab after auto-download by reserving the tab during the user click flow
-- NVIDIA NIM default report-model routing now uses Nano Omni for Detailed reports and Ultra 550B A55B for AM reports
+- NVIDIA NIM default report-model routing now uses Nano Omni for both Detailed and AM reports when `Default model` is selected
 - NVIDIA NIM model presets now include explicit Nano Omni and Ultra 550B A55B selectable options, with a dedicated `Default model` selection and consistent descriptive labels
 - Combined report completion now auto-downloads both generated PDFs (Detailed + AM)
-- Combined report completion now opens the feedback Microsoft Forms link in a new browser tab
+- Report PDFs modal now includes a primary-style `Feedback Form` button in the header actions row (next to the close button)
+- Mock Interview mode now includes a `Show/Hide Questions List` button to the right of `Modify JD/CV` and `Generate Questions`
+- In desktop view, the `Show Questions List` button stacks words on separate lines for readability
 - Combined report generation modal title now shows `Generating Reports...`
 - Detailed report stream now renders live formatted markdown output while generation is in progress
 - Detailed and AM report stream previews are now both non-selectable

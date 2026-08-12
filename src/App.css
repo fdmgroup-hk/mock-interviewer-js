@@ -475,6 +475,8 @@ h3 {
 .mock-question-actions {
     justify-self: start;
     display: grid;
+    grid-template-columns: var(--mock-action-btn-width) 6.1rem;
+    grid-template-rows: auto auto;
     gap: 0.5rem;
 }
 
@@ -535,6 +537,30 @@ h3 {
     padding-bottom: calc(0.52rem - 1px);
 }
 
+.mock-interview-actions .mock-question-list-btn {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    width: 6.1rem;
+    min-width: 6.1rem;
+    height: 100%;
+    min-height: calc(2 * 2.55rem + 0.5rem);
+    border-radius: 10px;
+    padding: 0.45rem 0.5rem;
+    line-height: 1.12;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mock-question-list-label-desktop > span {
+    display: block;
+}
+
+.mock-question-list-label-mobile {
+    display: none;
+}
+
 .mock-interview-actions .mock-end-interview-btn {
     width: var(--mock-action-btn-width);
     min-width: var(--mock-action-btn-width);
@@ -591,11 +617,29 @@ h3 {
 
     .mock-question-actions {
         justify-self: stretch;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
     }
 
     .mock-interview-actions .mock-cvjd-btn {
         width: 100%;
         min-width: 0;
+    }
+
+    .mock-interview-actions .mock-question-list-btn {
+        grid-column: auto;
+        grid-row: auto;
+        width: 100%;
+        min-width: 0;
+        min-height: 2.55rem;
+    }
+
+    .mock-question-list-label-desktop {
+        display: none;
+    }
+
+    .mock-question-list-label-mobile {
+        display: inline;
     }
 
     .mock-interview-actions .mock-end-interview-btn {
@@ -649,6 +693,13 @@ h3 {
     cursor: pointer;
     white-space: nowrap;
     transition: transform 160ms ease, filter 160ms ease, background-color 160ms ease;
+}
+
+a.btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn:hover {

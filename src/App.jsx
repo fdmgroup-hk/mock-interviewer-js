@@ -126,7 +126,7 @@ const LLM_PROVIDER_ENV_CONFIG = getLlmProviderConfig(import.meta.env)
 const OPENROUTER_BASE_URL = LLM_PROVIDER_ENV_CONFIG.openrouter.baseUrl
 const DEFAULT_NIM_BASE_URL = LLM_PROVIDER_ENV_CONFIG.nim.baseUrl
 const DEFAULT_NIM_DETAILED_REPORT_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
-const DEFAULT_NIM_AM_REPORT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b'
+const DEFAULT_NIM_AM_REPORT_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
 const LLM_HTTP_ERROR_TOAST_PREFIX = 'LLM API HTTP error:'
 const LLM_HTTP_ERROR_TOAST_TIMEOUT_MS = 10000
 const LLM_HTTP_ERROR_MESSAGE_MAX_LENGTH = 180
@@ -3416,13 +3416,6 @@ function App() {
             return
         }
 
-        // Reserve a tab during the direct user gesture to avoid popup blocking later.
-        const reservedFeedbackTab = window.open('', '_blank')
-        if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
-            reservedFeedbackTab.document.title = 'Opening feedback form...'
-            reservedFeedbackTab.document.body.textContent = 'Preparing reports. This tab will open the feedback form automatically.'
-        }
-
         const summaryMarkdown = buildAnswerSummaryMarkdown(
             interviewSummaries,
             overallInterviewSummary,
@@ -3664,30 +3657,10 @@ function App() {
                 amResult.pdfDocument.fileName || 'am-feedback-report.pdf',
             )
 
-            let feedbackTab = null
-            if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
-                reservedFeedbackTab.location.href = POST_REPORT_FEEDBACK_FORM_URL
-                feedbackTab = reservedFeedbackTab
-            } else {
-                feedbackTab = window.open(
-                    POST_REPORT_FEEDBACK_FORM_URL,
-                    '_blank',
-                    'noopener,noreferrer',
-                )
-            }
-
             setCombinedReportModalOpen(false)
             setCombinedReportPdfPreviewOpen(true)
-            if (feedbackTab) {
-                setToast('Detailed and AM PDFs downloaded. Feedback form opened in a new tab.')
-            } else {
-                setToast('Detailed and AM PDFs downloaded. Please allow pop-ups to open the feedback form.')
-            }
+            setToast('Detailed and AM PDFs downloaded.')
         } catch (error) {
-            if (reservedFeedbackTab && !reservedFeedbackTab.closed) {
-                reservedFeedbackTab.close()
-            }
-
             setCombinedReportModalOpen(false)
 
             if (hasDetailedPdf || hasAmPdf) {
@@ -6946,6 +6919,33 @@ function App() {
                                                 </span>
                                             )}
                                     </button>
+                                    <button
+                                        type="button"
+                                        className="btn ghost mock-question-list-btn"
+                                        onClick={() => {
+                                            setQuestionsDrawerOpen((prev) => !prev)
+                                        }}
+                                        aria-expanded={questionsDrawerOpen}
+                                        aria-label={
+                                            questionsDrawerOpen
+                                                ? 'Hide Questions List'
+                                                : 'Show Questions List'
+                                        }
+                                        title={
+                                            questionsDrawerOpen
+                                                ? 'Hide the questions list.'
+                                                : 'Show the questions list.'
+                                        }
+                                    >
+                                        <span className="mock-question-list-label-desktop" aria-hidden="true">
+                                            <span>{questionsDrawerOpen ? 'Hide' : 'Show'}</span>
+                                            <span>Questions</span>
+                                            <span>List</span>
+                                        </span>
+                                        <span className="mock-question-list-label-mobile">
+                                            {questionsDrawerOpen ? 'Hide Questions List' : 'Show Questions List'}
+                                        </span>
+                                    </button>
                                 </div>
                                 <div className="mock-start-actions">
                                     <button
@@ -8805,6 +8805,14 @@ function App() {
                         <div className="history-modal-header">
                             <h2 id="combined-report-pdf-title">Report PDFs</h2>
                             <div className="summary-header-actions">
+                                <a
+                                    className="btn"
+                                    href={POST_REPORT_FEEDBACK_FORM_URL}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    Feedback Form
+                                </a>
                                 <button
                                     type="button"
                                     className="btn ghost history-close-btn"

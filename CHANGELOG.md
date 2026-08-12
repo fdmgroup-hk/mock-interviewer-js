@@ -19,6 +19,22 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.23] - 2026-08-12
+
+### Changed
+- Updated the Report PDFs header action label from `Fill in feedback` to `Feedback Form` and aligned its color scheme with the primary action button style.
+- Added a new Mock Interview `Show/Hide Questions List` button to the right of `Modify JD/CV` and `Generate Questions`.
+- Updated the desktop `Show Questions List` button label layout to render one word per line for improved readability.
+
+### Fixed
+- Aligned the `Show Questions List` button font size with the `Modify JD/CV` button typography.
+
+## [1.10.22] - 2026-08-12
+
+### Changed
+- Updated NVIDIA NIM default report-model routing so both Detailed and AM reports use `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` when `Default model` is selected.
+- Updated post-generation UX to remove automatic feedback tab/popup opening and instead show a `Fill in feedback` link in the `Report PDFs` header actions row.
+
 ## [1.10.21] - 2026-08-11
 
 ### Changed
