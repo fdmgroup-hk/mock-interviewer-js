@@ -51,6 +51,7 @@ import { useMockInterviewFlow } from './hooks/useMockInterviewFlow'
 import { useQuestionGeneration } from './hooks/useQuestionGeneration'
 import { useReportGeneration } from './hooks/useReportGeneration'
 import { buildAnswerSummaryMarkdown } from './utils/summaryMarkdown'
+import { extractTextFromPdfFile } from './utils/pdfText'
 import { jsPDF } from 'jspdf'
 import { marked } from 'marked'
 import ReactMarkdown from 'react-markdown'
@@ -73,6 +74,7 @@ const STORAGE_AUTO_SAVE_MEDIA_TO_FOLDER = 'mia.autoSaveMediaToFolder'
 const STORAGE_DEEPGRAM_DEBUG = 'mia.deepgram.debug'
 const STORAGE_CV_TEXT = 'mia.cvText'
 const STORAGE_JD_TEXT = 'mia.jdText'
+const STORAGE_PRIOR_FEEDBACK_TEXT = 'mia.priorFeedbackText'
 const STORAGE_COMPANY_NAME = 'mia.companyName'
 const STORAGE_CONSULTANT_FULL_NAME = 'mia.consultantFullName'
 const STORAGE_JOB_TITLE = 'mia.jobTitle'
@@ -1654,6 +1656,10 @@ function App() {
     } = useMockInterviewFlow()
     const [cvText, setCvText] = useState(() => getSavedValue(STORAGE_CV_TEXT))
     const [jdText, setJdText] = useState(() => getSavedValue(STORAGE_JD_TEXT))
+    const [priorFeedbackText, setPriorFeedbackText] = useState(() =>
+        getSavedValue(STORAGE_PRIOR_FEEDBACK_TEXT),
+    )
+    const [isImportingFeedbackPdf, setIsImportingFeedbackPdf] = useState(false)
     const [companyNameInput, setCompanyNameInput] = useState(() =>
         getSavedValue(STORAGE_COMPANY_NAME),
     )
@@ -1866,6 +1872,7 @@ function App() {
     const historyAudioRef = useRef(null)
     const selectedHistoryMediaRef = useRef({ audioUrl: '', videoUrl: '' })
     const interviewerUploadInputRef = useRef(null)
+    const feedbackPdfInputRef = useRef(null)
 
     const hasKey = savedKey.length > 0
     const speechFallbackConfig = useMemo(
@@ -2070,6 +2077,10 @@ function App() {
     useEffect(() => {
         setSavedValue(STORAGE_JD_TEXT, jdText)
     }, [jdText])
+
+    useEffect(() => {
+        setSavedValue(STORAGE_PRIOR_FEEDBACK_TEXT, priorFeedbackText)
+    }, [priorFeedbackText])
 
     useEffect(() => {
         setSavedValue(STORAGE_COMPANY_NAME, companyNameInput)
@@ -2624,6 +2635,39 @@ function App() {
         setCustomInterviewerImageDataUrl('')
         setInterviewerImageId(DEFAULT_INTERVIEWER_IMAGE_ID)
         setToast('Custom interviewer image removed.')
+    }
+
+    async function handleFeedbackPdfImport(event) {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        if (!file) return
+
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+        if (!isPdf) {
+            setToast('Select a valid PDF file.')
+            return
+        }
+
+        setIsImportingFeedbackPdf(true)
+        try {
+            const extractedText = await extractTextFromPdfFile(file)
+            if (!extractedText.trim()) {
+                setToast('Could not find any text in this PDF.')
+                return
+            }
+
+            setPriorFeedbackText(extractedText)
+            setToast('Feedback PDF imported.')
+        } catch {
+            setToast('Could not read this PDF file.')
+        } finally {
+            setIsImportingFeedbackPdf(false)
+        }
+    }
+
+    function clearPriorFeedbackText() {
+        setPriorFeedbackText('')
+        setToast('Prior feedback cleared.')
     }
 
     // Keep dependencies minimal here; closeSettings is intentionally excluded to avoid escape-handler churn.
@@ -3276,9 +3320,10 @@ function App() {
         const jobDescription = jdText.trim()
         const companyName = companyNameInput.trim()
         const jobTitle = jobTitleInput.trim()
+        const priorFeedback = priorFeedbackText.trim()
 
-        if (!cv && !jobDescription && !companyName && !jobTitle) {
-            setToast('Add CV, JD, company name, or job title before generating questions.')
+        if (!cv && !jobDescription && !companyName && !jobTitle && !priorFeedback) {
+            setToast('Add CV, JD, company name, job title, or prior feedback before generating questions.')
             return
         }
 
@@ -3347,13 +3392,22 @@ function App() {
                         },
                         context: {
                             question: 'Generate interview questions from profile context.',
-                            answer: 'Use the provided CV/JD/company fields only.',
-                            generationGuidelines: `${DEFAULT_QUESTION_GENERATION_GUIDELINES} If JD is present, include some JD-only questions that are not CV-derived.`,
+                            answer: 'Use the provided CV/JD/company/prior feedback fields only.',
+                            generationGuidelines: [
+                                DEFAULT_QUESTION_GENERATION_GUIDELINES,
+                                'If JD is present, include some JD-only questions that are not CV-derived.',
+                                priorFeedback
+                                    ? 'Prior interview feedback is provided below. Prioritize questions that let the candidate practice and address the weaknesses and recommended coach actions called out in that feedback.'
+                                    : '',
+                            ]
+                                .filter(Boolean)
+                                .join(' '),
                             metricSummary: 'n/a',
                             companyName,
                             jobTitle,
                             cv,
                             jobDescription,
+                            priorFeedback,
                         },
                     })
                     break
@@ -7950,11 +8004,14 @@ function App() {
                                     onClick={() => {
                                         requestGenerateQuestionsFromQuestionsModal({ closeCvJd: true })
                                     }}
-                                    disabled={isGeneratingQuestions || (!cvText.trim() && !jdText.trim())}
+                                    disabled={
+                                        isGeneratingQuestions ||
+                                        (!cvText.trim() && !jdText.trim() && !priorFeedbackText.trim())
+                                    }
                                     title={
-                                        !cvText.trim() && !jdText.trim()
-                                            ? 'Add CV or JD details first.'
-                                            : 'Generates questions based on CV/JD/Company Name'
+                                        !cvText.trim() && !jdText.trim() && !priorFeedbackText.trim()
+                                            ? 'Add CV, JD, or prior feedback details first.'
+                                            : 'Generates questions based on CV/JD/Company Name/Prior Feedback'
                                     }
                                 >
                                     {isGeneratingQuestions ? 'Generating...' : 'Generate Questions'}
@@ -8037,6 +8094,49 @@ function App() {
                                     onChange={(event) => setCvText(event.target.value)}
                                     rows={12}
                                     placeholder="Paste your CV here"
+                                    disabled={isCvJdModalEditLocked}
+                                />
+
+                                <div className="cvjd-label-row">
+                                    <label htmlFor="cvjd-prior-feedback" className="label cvjd-label">
+                                        Prior Feedback (optional)
+                                    </label>
+                                    <div className="cvjd-prior-feedback-actions">
+                                        <button
+                                            type="button"
+                                            className="btn ghost"
+                                            onClick={() => feedbackPdfInputRef.current?.click()}
+                                            disabled={isCvJdModalEditLocked || isImportingFeedbackPdf}
+                                            title="Import a previously downloaded feedback report PDF"
+                                        >
+                                            {isImportingFeedbackPdf ? 'Importing...' : 'Import Feedback PDF'}
+                                        </button>
+                                        {Boolean(priorFeedbackText.trim()) && (
+                                            <button
+                                                type="button"
+                                                className="btn ghost"
+                                                onClick={clearPriorFeedbackText}
+                                                disabled={isCvJdModalEditLocked}
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                        <input
+                                            ref={feedbackPdfInputRef}
+                                            type="file"
+                                            accept="application/pdf,.pdf"
+                                            className="sr-only"
+                                            onChange={handleFeedbackPdfImport}
+                                        />
+                                    </div>
+                                </div>
+                                <textarea
+                                    id="cvjd-prior-feedback"
+                                    className="field cvjd-textarea"
+                                    value={priorFeedbackText}
+                                    onChange={(event) => setPriorFeedbackText(event.target.value)}
+                                    rows={12}
+                                    placeholder="Import a prior feedback report PDF, or paste feedback text here. New questions will target the weaknesses it identifies."
                                     disabled={isCvJdModalEditLocked}
                                 />
                             </div>

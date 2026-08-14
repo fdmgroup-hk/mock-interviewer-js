@@ -174,6 +174,7 @@ function buildContextBlock(context = {}) {
     const jobTitle = context.jobTitle || '(not provided)'
     const cv = context.cv || '(not provided)'
     const jobDescription = context.jobDescription || '(not provided)'
+    const priorFeedback = context.priorFeedback || ''
 
     return [
         'Interview context:',
@@ -189,6 +190,7 @@ function buildContextBlock(context = {}) {
         cv,
         '- Job Description:',
         jobDescription,
+        ...(priorFeedback ? ['- Prior Interview Feedback:', priorFeedback] : []),
     ].join('\n')
 }
 

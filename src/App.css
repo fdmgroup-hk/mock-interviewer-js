@@ -2753,6 +2753,25 @@ a.btn {
     margin-top: 0.55rem;
 }
 
+.cvjd-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+
+.cvjd-label-row .cvjd-label {
+    margin-top: 0;
+}
+
+.cvjd-prior-feedback-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
 .cvjd-field,
 .cvjd-textarea {
     width: 100%;
