@@ -3890,6 +3890,37 @@ function App() {
         }
     }
 
+    async function ensureCameraPermissionForMockInterviewStart() {
+        if (isCameraAccessAllowed) return true
+
+        if (!navigator?.mediaDevices?.getUserMedia) {
+            setToast('Camera access is unavailable in this browser.')
+            return true
+        }
+
+        setEnableCamera(true)
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                },
+                audio: false,
+            })
+
+            for (const track of stream.getTracks()) {
+                track.stop()
+            }
+
+            setHasCameraAccess(true)
+            void startCamera()
+            return true
+        } catch {
+            setToast('Allow camera access to enable video during mock interview.')
+            return true
+        }
+    }
+
     async function startMockInterviewQuestionAt(index, options = {}) {
         const questions = options.questions || parsedDrawerQuestions
         const question = questions[index]
@@ -3945,6 +3976,10 @@ function App() {
         if (startIndex < 0) {
             setToast('Generate questions first.')
             return
+        }
+
+        if (!isCameraAccessAllowed) {
+            void ensureCameraPermissionForMockInterviewStart()
         }
 
         const hasMicrophonePermission = await ensureMicrophonePermissionForMockInterviewStart()
