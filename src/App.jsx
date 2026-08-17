@@ -1763,6 +1763,8 @@ function App() {
         setCombinedReportModalOpen,
         amReportMarkdownPreview,
         setAmReportMarkdownPreview,
+        coachReportMarkdownPreview,
+        setCoachReportMarkdownPreview,
         detailedReportMarkdownPreview,
         setDetailedReportMarkdownPreview,
         combinedReportPdfPreviewOpen,
@@ -1773,6 +1775,12 @@ function App() {
         setAmReportPdfBlob,
         amReportPdfFileName,
         setAmReportPdfFileName,
+        coachReportPdfPreviewUrl,
+        setCoachReportPdfPreviewUrl,
+        coachReportPdfBlob,
+        setCoachReportPdfBlob,
+        coachReportPdfFileName,
+        setCoachReportPdfFileName,
         detailedReportPdfPreviewUrl,
         setDetailedReportPdfPreviewUrl,
         detailedReportPdfBlob,
@@ -3487,6 +3495,9 @@ function App() {
         setAmReportPdfPreviewUrl('')
         setAmReportPdfBlob(null)
         setAmReportPdfFileName('')
+        setCoachReportPdfPreviewUrl('')
+        setCoachReportPdfBlob(null)
+        setCoachReportPdfFileName('')
         setDetailedReportPdfPreviewUrl('')
         setDetailedReportPdfBlob(null)
         setDetailedReportPdfFileName('')
@@ -3495,6 +3506,7 @@ function App() {
         setCombinedReportModalOpen(true)
         setCombinedReportPdfPreviewOpen(false)
         setAmReportMarkdownPreview('Waiting for detailed report...')
+        setCoachReportMarkdownPreview('Waiting for AM report...')
         setDetailedReportMarkdownPreview('Generating detailed report...')
         setConfirmCloseCombinedReportPdfOpen(false)
         setToast('Generating detailed report first, then AM report...')
@@ -3680,6 +3692,26 @@ function App() {
             }
         }
 
+        const generateCoachTask = async (amReportText) => {
+            const coachPdfDocument = await downloadInterviewReportPdf({
+                companyName,
+                consultantFullName,
+                jobTitle,
+                feedbackText: amReportText,
+                llmProviderLabel: 'Coach Report',
+                llmModel: 'coach-copy',
+                reportTitle: 'Coach Interview Feedback Report',
+                feedbackSectionTitle: 'Coach Feedback Output',
+                fileNamePrefix: 'coach-report',
+            })
+
+            if (!coachPdfDocument?.blob) {
+                throw new Error('Could not prepare coach report PDF.')
+            }
+
+            return { text: amReportText, pdfDocument: coachPdfDocument }
+        }
+
         let hasDetailedPdf = false
         let hasAmPdf = false
 
@@ -3696,11 +3728,18 @@ function App() {
             setAmReportMarkdownPreview('Generating AM report from detailed report...')
 
             const amResult = await generateAmTask(detailedResult.text)
+            setCoachReportMarkdownPreview(amResult.text)
             const amPreviewUrl = URL.createObjectURL(amResult.pdfDocument.blob)
             setAmReportPdfPreviewUrl(amPreviewUrl)
             setAmReportPdfBlob(amResult.pdfDocument.blob)
             setAmReportPdfFileName(amResult.pdfDocument.fileName || 'am-feedback-report.pdf')
             hasAmPdf = true
+
+            const coachResult = await generateCoachTask(amResult.text)
+            const coachPreviewUrl = URL.createObjectURL(coachResult.pdfDocument.blob)
+            setCoachReportPdfPreviewUrl(coachPreviewUrl)
+            setCoachReportPdfBlob(coachResult.pdfDocument.blob)
+            setCoachReportPdfFileName(coachResult.pdfDocument.fileName || 'coach-report.pdf')
 
             downloadBlob(
                 detailedResult.pdfDocument.blob,
@@ -3710,10 +3749,14 @@ function App() {
                 amResult.pdfDocument.blob,
                 amResult.pdfDocument.fileName || 'am-feedback-report.pdf',
             )
+            downloadBlob(
+                coachResult.pdfDocument.blob,
+                coachResult.pdfDocument.fileName || 'coach-report.pdf',
+            )
 
             setCombinedReportModalOpen(false)
             setCombinedReportPdfPreviewOpen(true)
-            setToast('Detailed and AM PDFs downloaded.')
+            setToast('Detailed, AM, and Coach PDFs downloaded.')
         } catch (error) {
             setCombinedReportModalOpen(false)
 
@@ -3775,6 +3818,16 @@ function App() {
         setToast('Detailed report PDF downloaded.')
     }
 
+    function downloadCurrentCoachReportPdf() {
+        if (!coachReportPdfBlob) {
+            setToast('No coach report PDF is available to download.')
+            return
+        }
+
+        downloadBlob(coachReportPdfBlob, coachReportPdfFileName || 'coach-report.pdf')
+        setToast('Coach report PDF downloaded.')
+    }
+
     function requestCloseCombinedReportPdfPreview() {
         setConfirmCloseCombinedReportPdfOpen(true)
     }
@@ -3785,9 +3838,15 @@ function App() {
         setAmReportPdfBlob(null)
         setAmReportPdfFileName('')
         setAmReportPdfPreviewUrl('')
+        setCoachReportPdfBlob(null)
+        setCoachReportPdfFileName('')
+        setCoachReportPdfPreviewUrl('')
         setDetailedReportPdfBlob(null)
         setDetailedReportPdfFileName('')
         setDetailedReportPdfPreviewUrl('')
+        setAmReportMarkdownPreview('')
+        setCoachReportMarkdownPreview('')
+        setDetailedReportMarkdownPreview('')
     }
 
     function importQuestion(questionText, options = {}) {
@@ -8898,11 +8957,21 @@ function App() {
                         </div>
                         <div className="question-modal-body am-report-stream-body">
                             <div className="combined-report-stream-grid" aria-live="polite">
-                                <div className="combined-report-stream-panel">
-                                    <h3>AM Report</h3>
-                                    <div className="question-modal-inner am-report-stream-inner" ref={amReportPreviewScrollRef}>
-                                        <div className="am-report-stream-content no-select">
-                                            <ReactMarkdown>{amReportMarkdownPreview || 'Generating AM report...'}</ReactMarkdown>
+                                <div className="combined-report-stream-column-left">
+                                    <div className="combined-report-stream-panel">
+                                        <h3>AM Report</h3>
+                                        <div className="question-modal-inner am-report-stream-inner" ref={amReportPreviewScrollRef}>
+                                            <div className="am-report-stream-content no-select">
+                                                <ReactMarkdown>{amReportMarkdownPreview || 'Generating AM report...'}</ReactMarkdown>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="combined-report-stream-panel">
+                                        <h3>Coach Report</h3>
+                                        <div className="question-modal-inner am-report-stream-inner">
+                                            <div className="am-report-stream-content no-select">
+                                                <ReactMarkdown>{coachReportMarkdownPreview || 'Generating coach report...'}</ReactMarkdown>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -8960,34 +9029,64 @@ function App() {
                             </div>
                         </div>
                         <div className="combined-report-pdf-body">
-                            <section className="combined-report-pdf-panel">
-                                <div className="combined-report-pdf-panel-header">
-                                    <h3>AM Report PDF</h3>
-                                    <button
-                                        type="button"
-                                        className="btn ghost icon-only-btn"
-                                        onClick={downloadCurrentAmReportPdf}
-                                        aria-label="Download AM PDF"
-                                        title="Download AM PDF"
-                                        disabled={!amReportPdfBlob}
-                                    >
-                                        <span className="material-symbols-outlined" aria-hidden="true">
-                                            download
-                                        </span>
-                                    </button>
-                                </div>
-                                <div className="am-report-pdf-body">
-                                    {amReportPdfPreviewUrl ? (
-                                        <iframe
-                                            title="AM Feedback PDF Preview"
-                                            src={amReportPdfPreviewUrl}
-                                            className="am-report-pdf-iframe"
-                                        />
-                                    ) : (
-                                        <p className="muted combined-report-pdf-empty">AM PDF not available.</p>
-                                    )}
-                                </div>
-                            </section>
+                            <div className="combined-report-pdf-left-column">
+                                <section className="combined-report-pdf-panel">
+                                    <div className="combined-report-pdf-panel-header">
+                                        <h3>AM Report PDF</h3>
+                                        <button
+                                            type="button"
+                                            className="btn ghost icon-only-btn"
+                                            onClick={downloadCurrentAmReportPdf}
+                                            aria-label="Download AM PDF"
+                                            title="Download AM PDF"
+                                            disabled={!amReportPdfBlob}
+                                        >
+                                            <span className="material-symbols-outlined" aria-hidden="true">
+                                                download
+                                            </span>
+                                        </button>
+                                    </div>
+                                    <div className="am-report-pdf-body">
+                                        {amReportPdfPreviewUrl ? (
+                                            <iframe
+                                                title="AM Feedback PDF Preview"
+                                                src={amReportPdfPreviewUrl}
+                                                className="am-report-pdf-iframe"
+                                            />
+                                        ) : (
+                                            <p className="muted combined-report-pdf-empty">AM PDF not available.</p>
+                                        )}
+                                    </div>
+                                </section>
+                                <section className="combined-report-pdf-panel">
+                                    <div className="combined-report-pdf-panel-header">
+                                        <h3>Coach Report PDF</h3>
+                                        <button
+                                            type="button"
+                                            className="btn ghost icon-only-btn"
+                                            onClick={downloadCurrentCoachReportPdf}
+                                            aria-label="Download Coach PDF"
+                                            title="Download Coach PDF"
+                                            disabled={!coachReportPdfBlob}
+                                        >
+                                            <span className="material-symbols-outlined" aria-hidden="true">
+                                                download
+                                            </span>
+                                        </button>
+                                    </div>
+                                    <div className="am-report-pdf-body">
+                                        {coachReportPdfPreviewUrl ? (
+                                            <iframe
+                                                title="Coach Report PDF Preview"
+                                                src={coachReportPdfPreviewUrl}
+                                                className="am-report-pdf-iframe"
+                                            />
+                                        ) : (
+                                            <p className="muted combined-report-pdf-empty">Coach PDF not available.</p>
+                                        )}
+                                    </div>
+                                </section>
+                            </div>
                             <section className="combined-report-pdf-panel">
                                 <div className="combined-report-pdf-panel-header">
                                     <h3>Detailed Report PDF</h3>
