@@ -11,12 +11,19 @@ export function useQuestionGeneration({
     onClearSummaryBeforeGenerate,
     onToast,
 }) {
+    const DEFAULT_QUESTION_TYPES = {
+        behavioural: true,
+        technical: true,
+        situational: true,
+    }
+
     const [confirmRegenerateQuestionsOpen, setConfirmRegenerateQuestionsOpen] = useState(false)
     const [confirmGenerateQuestionsClearSummaryOpen, setConfirmGenerateQuestionsClearSummaryOpen] = useState(false)
     const [generateQuestionsCountModalOpen, setGenerateQuestionsCountModalOpen] = useState(false)
     const [generateQuestionsCountInput, setGenerateQuestionsCountInput] = useState(
         String(defaultQuestionCount),
     )
+    const [selectedQuestionTypes, setSelectedQuestionTypes] = useState(DEFAULT_QUESTION_TYPES)
     const [pendingGenerateQuestionsOptions, setPendingGenerateQuestionsOptions] = useState(null)
     const [pendingRegenerateQuestionsOptions, setPendingRegenerateQuestionsOptions] = useState(null)
     const [pendingGenerateQuestionsClearSummaryOptions, setPendingGenerateQuestionsClearSummaryOptions] = useState(null)
@@ -27,6 +34,13 @@ export function useQuestionGeneration({
         setGenerateQuestionsCountInput(String(defaultQuestionCount))
         setGenerateQuestionsCountModalOpen(true)
     }, [isGeneratingQuestions, defaultQuestionCount])
+
+    const setQuestionTypeSelected = useCallback((type, checked) => {
+        setSelectedQuestionTypes((prev) => ({
+            ...prev,
+            [type]: checked,
+        }))
+    }, [])
 
     const requestGenerateQuestionsFlow = useCallback((options = {}) => {
         if (isGeneratingQuestions) return
@@ -62,6 +76,12 @@ export function useQuestionGeneration({
             return
         }
 
+        const hasAnyQuestionTypeSelected = Object.values(selectedQuestionTypes).some(Boolean)
+        if (!hasAnyQuestionTypeSelected) {
+            onToast('Select at least one question type.')
+            return
+        }
+
         const options = pendingGenerateQuestionsOptions || {}
         const { clearSummaryOnGenerate = false, ...generateOptions } = options
 
@@ -74,6 +94,7 @@ export function useQuestionGeneration({
         onGenerateQuestions({
             ...generateOptions,
             questionCount: parsedCount,
+            questionTypes: selectedQuestionTypes,
         })
     }, [
         generateQuestionsCountInput,
@@ -83,6 +104,7 @@ export function useQuestionGeneration({
         onGenerateQuestions,
         onToast,
         pendingGenerateQuestionsOptions,
+        selectedQuestionTypes,
     ])
 
     const closeGenerateQuestionsCountModal = useCallback(() => {
@@ -155,6 +177,8 @@ export function useQuestionGeneration({
         generateQuestionsCountModalOpen,
         generateQuestionsCountInput,
         setGenerateQuestionsCountInput,
+        selectedQuestionTypes,
+        setQuestionTypeSelected,
         openGenerateQuestionsCountModal,
         confirmGenerateQuestionsClearSummary,
         cancelGenerateQuestionsClearSummary,

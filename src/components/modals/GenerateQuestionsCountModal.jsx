@@ -4,10 +4,18 @@ export default function GenerateQuestionsCountModal({
     onValueChange,
     onConfirm,
     onClose,
+    questionTypes,
+    onQuestionTypeChange,
     min = 2,
     max = 25,
 }) {
     if (!isOpen) return null
+
+    const selectedQuestionTypes = questionTypes || {
+        behavioural: true,
+        technical: true,
+        situational: true,
+    }
 
     return (
         <div
@@ -39,6 +47,38 @@ export default function GenerateQuestionsCountModal({
                     onChange={(event) => onValueChange(event.target.value)}
                     autoFocus
                 />
+                <div className="question-count-type-options" role="group" aria-label="Question types">
+                    <label className="debug-toggle">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(selectedQuestionTypes.behavioural)}
+                            onChange={(event) =>
+                                onQuestionTypeChange?.('behavioural', event.target.checked)
+                            }
+                        />
+                        <span>Behavioural</span>
+                    </label>
+                    <label className="debug-toggle">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(selectedQuestionTypes.technical)}
+                            onChange={(event) =>
+                                onQuestionTypeChange?.('technical', event.target.checked)
+                            }
+                        />
+                        <span>Technical</span>
+                    </label>
+                    <label className="debug-toggle">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(selectedQuestionTypes.situational)}
+                            onChange={(event) =>
+                                onQuestionTypeChange?.('situational', event.target.checked)
+                            }
+                        />
+                        <span>Situational</span>
+                    </label>
+                </div>
                 <div className="actions">
                     <button
                         type="button"

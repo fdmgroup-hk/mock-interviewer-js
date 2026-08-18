@@ -1891,6 +1891,12 @@ a.btn {
     margin-bottom: 0.25rem;
 }
 
+.question-count-type-options {
+    display: grid;
+    gap: 0.3rem;
+    margin-bottom: 0.15rem;
+}
+
 .question-count-modal .actions {
     margin-top: 0.25rem;
     flex-wrap: wrap;

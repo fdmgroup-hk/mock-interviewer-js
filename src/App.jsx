@@ -120,6 +120,29 @@ const DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES =
     'Generate an in-depth report with an executive summary first, then detailed per-question analysis. For each question include strengths, weaknesses, metric interpretation, and a suggested improved answer. Tailor suggested answers to CV/JD/company/job title when relevant, and explicitly state when profile context is not relevant to that specific question.'
 const QUESTION_GENERATION_USER_MESSAGE = (questionCount, jdOnlyQuestionCount) =>
     `Generate ${questionCount} concise mock interview questions based on the provided CV, job description, and company. If a job description is provided, include at least ${jdOnlyQuestionCount} questions that are derived only from the job description requirements and are not based on the CV. Return only the questions, one per line, no intro or explanation.`
+
+function buildQuestionTypePromptInstruction(questionTypes = {}) {
+    const selectedLabels = [
+        questionTypes.behavioural ? 'Behavioural' : '',
+        questionTypes.technical ? 'Technical' : '',
+        questionTypes.situational ? 'Situational' : '',
+    ].filter(Boolean)
+    const situationalTheoreticalInstruction =
+        'When generating situational questions, use theoretical scenario-based prompts (e.g., "What would you do if...") rather than asking about past experiences.'
+
+    if (!selectedLabels.length) {
+        return `Include a balanced mix of Behavioural, Technical, and Situational interview questions. ${situationalTheoreticalInstruction}`
+    }
+
+    if (selectedLabels.length === 1) {
+        if (questionTypes.situational) {
+            return `Generate only Situational interview questions. ${situationalTheoreticalInstruction}`
+        }
+        return `Generate only ${selectedLabels[0]} interview questions.`
+    }
+
+    return `Generate only these question types: ${selectedLabels.join(', ')}.${questionTypes.situational ? ` ${situationalTheoreticalInstruction}` : ''}`
+}
 const AM_REPORT_USER_MESSAGE =
     'You are an Interview Expert for a Consulting Firm. You are writing feedback for mock interview answers. Using interview Job Title, Q&A transcript, Q&A metrics, JD and CV, return concise, evidence-based markdown in this exact section order: 1) ## Overall Verdict, 2) ## Key Strengths, 3) ## Key Weaknesses, 4) ## Domain Knowledge Assessment, 5) ## Recommended Coach Actions, 6) ## Final Recommendation. Keep it account-manager friendly and do not include per-question analysis.'
 const DETAILED_REPORT_USER_MESSAGE =
@@ -2931,6 +2954,8 @@ function App() {
         generateQuestionsCountModalOpen,
         generateQuestionsCountInput,
         setGenerateQuestionsCountInput,
+        selectedQuestionTypes,
+        setQuestionTypeSelected,
         confirmGenerateQuestionsClearSummary,
         cancelGenerateQuestionsClearSummary,
         confirmGenerateQuestionsCountSelection,
@@ -3320,6 +3345,11 @@ function App() {
             openQuestionsDrawer = true,
             runInBackground = false,
             questionCount = DEFAULT_GENERATED_QUESTION_COUNT,
+            questionTypes = {
+                behavioural: true,
+                technical: true,
+                situational: true,
+            },
         } = options
         if (isGeneratingQuestions) return
 
@@ -3330,6 +3360,7 @@ function App() {
         const shouldOpenQuestionsDrawer =
             openQuestionsDrawer && cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE
         const jdOnlyQuestionCount = Math.floor(0.4 * normalizedQuestionCount)
+        const questionTypePromptInstruction = buildQuestionTypePromptInstruction(questionTypes)
         setRequestedQuestionGenerationCount(normalizedQuestionCount)
         setGeneratedQuestionProgressCount(0)
 
@@ -3412,6 +3443,7 @@ function App() {
                             answer: 'Use the provided CV/JD/company/prior feedback fields only.',
                             generationGuidelines: [
                                 DEFAULT_QUESTION_GENERATION_GUIDELINES,
+                                questionTypePromptInstruction,
                                 'If JD is present, include some JD-only questions that are not CV-derived.',
                                 priorFeedback
                                     ? 'Prior interview feedback is provided below. Prioritize questions that let the candidate practice and address the weaknesses and recommended coach actions called out in that feedback.'
@@ -8295,7 +8327,7 @@ function App() {
                                     type="button"
                                     className="btn ghost"
                                     onClick={clearQuestionsList}
-                                    disabled={!parsedDrawerQuestions.length}
+                                    disabled={isGeneratingQuestions || !parsedDrawerQuestions.length}
                                 >
                                     Clear Questions List
                                 </button>
@@ -8333,6 +8365,7 @@ function App() {
                                     onChange={(event) =>
                                         handleQuestionsBulkInputChange(event.target.value)
                                     }
+                                    disabled={isGeneratingQuestions}
                                     rows={6}
                                     placeholder={[
                                         'Tell me about a challenging project you worked on.',
@@ -8382,6 +8415,7 @@ function App() {
                                                                 onClick={() => {
                                                                     removeParsedQuestionAt(index)
                                                                 }}
+                                                                disabled={isGeneratingQuestions}
                                                                 aria-label={`Delete question ${index + 1}`}
                                                                 title="Delete question"
                                                             >
@@ -9257,6 +9291,8 @@ function App() {
                 isOpen={generateQuestionsCountModalOpen}
                 value={generateQuestionsCountInput}
                 onValueChange={setGenerateQuestionsCountInput}
+                questionTypes={selectedQuestionTypes}
+                onQuestionTypeChange={setQuestionTypeSelected}
                 onConfirm={confirmGenerateQuestionsCountSelection}
                 onClose={closeGenerateQuestionsCountModal}
                 min={2}
