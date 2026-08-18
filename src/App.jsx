@@ -182,6 +182,10 @@ const DEFAULT_DEEPGRAM_LISTEN_URL =
     'https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&filler_words=true'
 const DEFAULT_DEEPGRAM_SPEAK_URL =
     'https://api.deepgram.com/v1/speak?model=aura-2-thalia-en'
+const DGK_INTERNAL_SEED =
+    '5e5de030d68a11ccf5998c6f1107f58a1593319f'
+const NMK_INTERNAL_SEED =
+    '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'
 
 const LEGACY_DEFAULT_INTERVIEWER_IMAGE_ID = 'default'
 const CUSTOM_INTERVIEWER_IMAGE_ID = 'custom-upload'
@@ -1537,13 +1541,14 @@ function App() {
     const [confirmFolderSelectOpen, setConfirmFolderSelectOpen] = useState(false)
     const [confirmStartNewMockInterviewOpen, setConfirmStartNewMockInterviewOpen] = useState(false)
     const [confirmCloseSettingsUnsavedLlmOpen, setConfirmCloseSettingsUnsavedLlmOpen] = useState(false)
+    const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
     const [pendingDeleteAction, setPendingDeleteAction] = useState(null)
-    const [savedKey, setSavedKey] = useState(() => getSavedValue(STORAGE_KEY))
+    const [savedKey, setSavedKey] = useState(DGK_INTERNAL_SEED)
     const [lastValidatedAt, setLastValidatedAt] = useState(() =>
         getSavedValue(STORAGE_VALIDATED_AT),
     )
 
-    const [keyInput, setKeyInput] = useState('')
+    const [keyInput, setKeyInput] = useState(DGK_INTERNAL_SEED)
     const [showKey, setShowKey] = useState(false)
     const [fieldError, setFieldError] = useState('')
     const [banner, setBanner] = useState('')
@@ -1821,7 +1826,7 @@ function App() {
         const persistedOpenrouterApiKey = getSavedValue(STORAGE_OPENROUTER_API_KEY)
         const persistedOpenrouterModel =
             getSavedValue(STORAGE_OPENROUTER_MODEL) || LLM_PROVIDER_ENV_CONFIG.openrouter.model
-        const persistedNimApiKey = getSavedValue(STORAGE_NIM_API_KEY)
+        const persistedNimApiKey = NMK_INTERNAL_SEED
         const persistedNimModel =
             getSavedValue(STORAGE_NIM_MODEL) || LLM_PROVIDER_ENV_CONFIG.nim.model
         const persistedNimBaseUrl = getSavedValue(STORAGE_NIM_BASE_URL) || DEFAULT_NIM_BASE_URL
@@ -1887,6 +1892,10 @@ function App() {
     const maskedSummary = hasKey
         ? `Key saved (ends with ${savedKey.slice(-2).padStart(6, '*')})`
         : 'No key saved yet.'
+    const isDefaultDeepgramKeyInput =
+        String(keyInput || '').trim() === DGK_INTERNAL_SEED
+    const isDefaultNimApiKeyInput =
+        String(nimApiKeyInput || '').trim() === NMK_INTERNAL_SEED
     const hasCustomInterviewerImage = Boolean(customInterviewerImageDataUrl)
     const isInterviewerEasterEggUnlocked = themeTogglePressCount >= 50
     const selectableBuiltInInterviewerImages = useMemo(() => {
@@ -4601,6 +4610,7 @@ function App() {
 
     function openSettings() {
         setSettingsOpen(true)
+        setShowAdvancedSettings(false)
         setKeyInput(savedKey)
         setFieldError('')
         setLlmProviderModeInput(llmProviderMode)
@@ -4643,6 +4653,7 @@ function App() {
         setSettingsOpen(false)
         setFieldError('')
         setShowKey(false)
+        setShowAdvancedSettings(false)
         setLlmSettingsError('')
     }
 
@@ -4651,6 +4662,7 @@ function App() {
         setConfirmCloseSettingsUnsavedLlmOpen(false)
         setFieldError('')
         setShowKey(false)
+        setShowAdvancedSettings(false)
         setLlmSettingsError('')
     }
 
@@ -4778,6 +4790,25 @@ function App() {
             })
     }
 
+    function useDefaultKeys() {
+        const nowIso = new Date().toISOString()
+
+        setSavedKey(DGK_INTERNAL_SEED)
+        setKeyInput(DGK_INTERNAL_SEED)
+        setLastValidatedAt(nowIso)
+        setIsDeepgramKeyInvalid(false)
+        setShowKey(false)
+        setFieldError('')
+        setSavedValue(STORAGE_KEY, DGK_INTERNAL_SEED)
+        setSavedValue(STORAGE_VALIDATED_AT, nowIso)
+
+        setNimApiKey(NMK_INTERNAL_SEED)
+        setNimApiKeyInput(NMK_INTERNAL_SEED)
+        setSavedValue(STORAGE_NIM_API_KEY, NMK_INTERNAL_SEED)
+
+        setToast('Default API keys applied.')
+    }
+
     function handleOpenrouterModelSelection(nextValue) {
         if (nextValue === CUSTOM_MODEL_OPTION_VALUE) {
             setOpenrouterModelInput(openrouterCustomModelInput.trim())
@@ -4815,21 +4846,21 @@ function App() {
         setLlmProviderMode(defaultProviderMode)
         setOpenrouterApiKey('')
         setOpenrouterModel(defaultOpenrouterModel)
-        setNimApiKey('')
+        setNimApiKey(NMK_INTERNAL_SEED)
         setNimModel(defaultNimModel)
         setNimBaseUrl(defaultNimBaseUrl)
 
         setLlmProviderModeInput(defaultProviderMode)
         setOpenrouterApiKeyInput('')
         setOpenrouterModelInput(defaultOpenrouterModel)
-        setNimApiKeyInput('')
+        setNimApiKeyInput(NMK_INTERNAL_SEED)
         setNimModelInput(defaultNimModel)
         setNimBaseUrlInput(defaultNimBaseUrl)
         setLlmSettingsError('')
 
         clearSavedValue('mia.llm.persistKeys')
         clearSavedValue(STORAGE_OPENROUTER_API_KEY)
-        clearSavedValue(STORAGE_NIM_API_KEY)
+        setSavedValue(STORAGE_NIM_API_KEY, NMK_INTERNAL_SEED)
         setSavedValue(STORAGE_LLM_PROVIDER_MODE, defaultProviderMode)
         setSavedValue(STORAGE_OPENROUTER_MODEL, defaultOpenrouterModel)
         setSavedValue(STORAGE_NIM_MODEL, defaultNimModel)
@@ -5796,7 +5827,7 @@ function App() {
 
         if (!hasSttProvider) {
             openSettings()
-            setBanner('Add Deepgram key, or enable "Use fallback when Deepgram key is missing" in Settings.')
+            setBanner('Add Deepgram key, or enable "Use fallback when Deepgram is not available" in Settings.')
             return false
         }
 
@@ -8223,56 +8254,8 @@ function App() {
                         <div className="settings-modal-body">
                             <div className="settings-section">
                                 <h3 className="settings-section-title">Speech &amp; Transcription</h3>
-                                <label htmlFor="deepgram-key" className="label label-with-link">
-                                    <span>Deepgram API Key</span>
-                                    <a
-                                        className="settings-provider-link"
-                                        href="https://deepgram.com/"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                    >
-                                        (Get API Key)
-                                    </a>
-                                </label>
-                                <div className="key-input-row">
-                                    <input
-                                        ref={deepgramKeyInputRef}
-                                        id="deepgram-key"
-                                        type={showKey ? 'text' : 'password'}
-                                        value={keyInput}
-                                        onChange={(event) => updateInput(event.target.value)}
-                                        onBlur={validateOnBlur}
-                                        aria-describedby={fieldError ? 'key-error' : undefined}
-                                        className={fieldError ? 'field field-error' : 'field'}
-                                        autoComplete="off"
-                                    />
-                                    <button
-                                        type="button"
-                                        className="btn key-save-btn"
-                                        onMouseDown={(event) => event.preventDefault()}
-                                        onClick={saveSettings}
-                                    >
-                                        Save key
-                                    </button>
-                                </div>
                                 <div className="actions wrap key-actions-row">
-                                    <button
-                                        type="button"
-                                        className="btn ghost"
-                                        onClick={() => setShowKey((prev) => !prev)}
-                                    >
-                                        {showKey ? 'Hide key' : 'Show key'}
-                                    </button>
-                                    {hasKey && (
-                                        <button
-                                            type="button"
-                                            className="btn danger"
-                                            onClick={() => setConfirmRemoveOpen(true)}
-                                        >
-                                            Remove key
-                                        </button>
-                                    )}
-                                    <label className="debug-toggle" title="Use local fallback when Deepgram key is missing">
+                                    <label className="debug-toggle" title="Use local fallback when Deepgram is not available">
                                         <input
                                             type="checkbox"
                                             checked={fallbackWithoutDeepgramKey}
@@ -8280,7 +8263,7 @@ function App() {
                                                 setFallbackWithoutDeepgramKey(event.target.checked)
                                             }
                                         />
-                                        <span>Use fallback when Deepgram key is missing</span>
+                                        <span>Use fallback when Deepgram is not available</span>
                                     </label>
                                 </div>
                                 {fieldError && (
@@ -8289,12 +8272,6 @@ function App() {
                                     </p>
                                 )}
 
-                                <p className="privacy-note">
-                                    Anyone with access to this browser profile can use this key until you remove it.
-                                </p>
-                                <p className="privacy-note">
-                                    Do not share screenshots of this page while key is visible.
-                                </p>
                                 <label className="debug-toggle">
                                     <input
                                         type="checkbox"
@@ -8392,36 +8369,6 @@ function App() {
 
                                 {shouldShowNimKeyAndModelSettings && (
                                     <>
-                                        <label className="label label-with-link">
-                                            <span>NVIDIA NIM API Key</span>
-                                            <a
-                                                className="settings-provider-link"
-                                                href="https://build.nvidia.com/explore/discover"
-                                                target="_blank"
-                                                rel="noreferrer"
-                                            >
-                                                (Get API Key)
-                                            </a>
-                                        </label>
-                                        <div className="key-input-row">
-                                            <input
-                                                className="field"
-                                                type="password"
-                                                value={nimApiKeyInput}
-                                                onChange={(event) => setNimApiKeyInput(event.target.value)}
-                                                autoComplete="off"
-                                            />
-                                            <button
-                                                type="button"
-                                                className="btn key-save-btn"
-                                                onMouseDown={(event) => event.preventDefault()}
-                                                onClick={saveNimKeyOnly}
-                                                disabled={isSavingNimKey}
-                                            >
-                                                {isSavingNimKey ? 'Saving...' : 'Save key'}
-                                            </button>
-                                        </div>
-
                                         <label className="label">NVIDIA NIM Model</label>
                                         <select
                                             className="field"
@@ -8464,7 +8411,7 @@ function App() {
                                         onClick={resetLlmSettingsToDefaults}
                                         title="Clear keys and reset provider/model defaults"
                                     >
-                                        Clear keys and reset to defaults
+                                        Reset to defaults
                                     </button>
                                 </div>
 
@@ -8695,6 +8642,125 @@ function App() {
                                     </label>
                                 </div>
                             )}
+
+                            <div className="settings-section">
+                                <h3 className="settings-section-title">Advanced Settings</h3>
+                                <div className="actions wrap">
+                                    <button
+                                        type="button"
+                                        className="btn ghost"
+                                        onClick={() => setShowAdvancedSettings((prev) => !prev)}
+                                        aria-expanded={showAdvancedSettings}
+                                    >
+                                        {showAdvancedSettings ? 'Hide Advanced Settings' : 'Show Advanced Settings'}
+                                    </button>
+                                </div>
+
+                                {showAdvancedSettings && (
+                                    <>
+                                        <h4 className="settings-section-title">API Keys</h4>
+                                        <div className="actions wrap key-actions-row">
+                                            <button
+                                                type="button"
+                                                className="btn ghost"
+                                                onClick={useDefaultKeys}
+                                            >
+                                                Use default keys
+                                            </button>
+                                        </div>
+
+                                        <label htmlFor="deepgram-key" className="label label-with-link">
+                                            <span>Deepgram API Key</span>
+                                            <a
+                                                className="settings-provider-link"
+                                                href="https://deepgram.com/"
+                                                target="_blank"
+                                                rel="noreferrer"
+                                            >
+                                                (Get API Key)
+                                            </a>
+                                        </label>
+                                        <div className="key-input-row">
+                                            <input
+                                                ref={deepgramKeyInputRef}
+                                                id="deepgram-key"
+                                                type={showKey && !isDefaultDeepgramKeyInput ? 'text' : 'password'}
+                                                value={isDefaultDeepgramKeyInput ? '' : keyInput}
+                                                onChange={(event) => updateInput(event.target.value)}
+                                                onBlur={validateOnBlur}
+                                                aria-describedby={fieldError ? 'key-error' : undefined}
+                                                className={fieldError ? 'field field-error' : 'field'}
+                                                autoComplete="off"
+                                                placeholder={isDefaultDeepgramKeyInput ? 'Default key' : ''}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="btn key-save-btn"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={saveSettings}
+                                            >
+                                                Save key
+                                            </button>
+                                        </div>
+                                        <div className="actions wrap key-actions-row">
+                                            {!isDefaultDeepgramKeyInput && (
+                                                <button
+                                                    type="button"
+                                                    className="btn ghost"
+                                                    onClick={() => setShowKey((prev) => !prev)}
+                                                >
+                                                    {showKey ? 'Hide key' : 'Show key'}
+                                                </button>
+                                            )}
+                                            {hasKey && !isDefaultDeepgramKeyInput && (
+                                                <button
+                                                    type="button"
+                                                    className="btn danger"
+                                                    onClick={() => setConfirmRemoveOpen(true)}
+                                                >
+                                                    Remove key
+                                                </button>
+                                            )}
+                                        </div>
+                                        {fieldError && (
+                                            <p id="key-error" className="error-text" aria-live="polite">
+                                                {fieldError}
+                                            </p>
+                                        )}
+
+                                        <label className="label label-with-link">
+                                            <span>NVIDIA NIM API Key</span>
+                                            <a
+                                                className="settings-provider-link"
+                                                href="https://build.nvidia.com/explore/discover"
+                                                target="_blank"
+                                                rel="noreferrer"
+                                            >
+                                                (Get API Key)
+                                            </a>
+                                        </label>
+                                        <div className="key-input-row">
+                                            <input
+                                                className="field"
+                                                type="password"
+                                                value={isDefaultNimApiKeyInput ? '' : nimApiKeyInput}
+                                                onChange={(event) => setNimApiKeyInput(event.target.value)}
+                                                autoComplete="off"
+                                                placeholder={isDefaultNimApiKeyInput ? 'Default key' : ''}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="btn key-save-btn"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={saveNimKeyOnly}
+                                                disabled={isSavingNimKey}
+                                            >
+                                                {isSavingNimKey ? 'Saving...' : 'Save key'}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
 
                         </div>
                     </div>
