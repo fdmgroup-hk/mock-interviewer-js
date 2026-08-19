@@ -3029,21 +3029,6 @@ function App() {
         return sections.join('\n')
     }
 
-    async function copyCvJdForGemini() {
-        const outputMarkdown = buildCvJdForGeminiMarkdown()
-        if (!outputMarkdown) {
-            setToast('Add CV, JD, or company name before copying.')
-            return
-        }
-
-        try {
-            await navigator.clipboard.writeText(outputMarkdown)
-            setToast('CV, JD, and company name copied for Gemini.')
-        } catch {
-            setToast('Could not copy CV/JD content.')
-        }
-    }
-
     function parseGeneratedQuestions(rawText) {
         const normalizedLines = String(rawText || '')
             .split(/\r?\n/)
@@ -8256,13 +8241,6 @@ function App() {
                                 CV and JD {companyNameInput.trim() ? `- ${companyNameInput.trim()}` : ''}
                             </h2>
                             <div className="summary-header-actions">
-                                <button
-                                    type="button"
-                                    className="btn ghost"
-                                    onClick={copyCvJdForGemini}
-                                >
-                                    Copy
-                                </button>
                                 <button
                                     type="button"
                                     className="btn ghost"
