@@ -143,8 +143,19 @@ function buildQuestionTypePromptInstruction(questionTypes = {}) {
 
     return `Generate only these question types: ${selectedLabels.join(', ')}.${questionTypes.situational ? ` ${situationalTheoreticalInstruction}` : ''}`
 }
+
+function buildInterviewTypeLabel(questionTypes = {}) {
+    return [
+        questionTypes.behavioural ? 'Behavioural' : '',
+        questionTypes.technical ? 'Technical' : '',
+        questionTypes.situational ? 'Situational' : '',
+    ].filter(Boolean).join(', ') || 'Not specified'
+}
+
 const AM_REPORT_USER_MESSAGE =
     'You are an Interview Expert for a Consulting Firm. You are writing feedback for mock interview answers. Using interview Job Title, Q&A transcript, Q&A metrics, JD and CV, return concise, evidence-based markdown in this exact section order: 1) ## Overall Verdict, 2) ## Key Strengths, 3) ## Key Weaknesses, 4) ## Domain Knowledge Assessment, 5) ## Recommended Coach Actions, 6) ## Final Recommendation. Keep it account-manager friendly and do not include per-question analysis.'
+const COACH_REPORT_USER_MESSAGE =
+    'Write only the final coach report in markdown. Do not reveal analysis, reasoning, planning, deliberation, instruction restatement, or self-critique. Do not begin with a preamble. The first characters of your response must be "## Overall Verdict" and the response must end after "## Final Recommendation". Use only evidence present in the interview questions, interview answer transcripts, and answer metrics for performance judgments. CV, JD, company, and job title may provide context but must not create evidence of interview performance. Return concise markdown in exactly this order: ## Overall Verdict, ## Preparedness Grade, ## Key Strengths, ## Key Weaknesses, then conditionally ## Domain Knowledge Assessment if the interview type includes Technical, conditionally ## Behavioural Assessment if it includes Behavioural, ## Recommended Coach Actions, and ## Final Recommendation. Overall Verdict must contain bullet points, never one summary paragraph. Preparedness Grade must contain exactly one grade from A+ to F and one short sentence explaining the preparedness level and performance-based reason. For Key Strengths and Key Weaknesses, assess each of these six aspects exactly once: Clarity and Structure, Relevance and Depth, Evidence and Examples, Communication, Confidence and Engagement, and Impact and Conclusion. Each aspect must be classified exclusively as either a strength or a weakness. Put an aspect in Key Strengths only when a specific positive performance is directly evidenced in a non-empty answer; otherwise put it in Key Weaknesses only when a specific deficiency is evidenced. Never infer a positive from silence, missing answers, short answers, no hesitations, speaking speed, or the fact that an answer was recorded. If no genuine strengths are evidenced, write only "- None demonstrated." Do not mention Odoo or any other technology in Domain Knowledge Assessment unless that topic was explicitly asked about in an interview question and the candidate gave a substantive answer about it. Domain Knowledge Assessment must use subject or tool bullets with square-bracket proficiency tags and concise evidence comments. Behavioural Assessment must use competency bullets with square-bracket proficiency tags and concise evidence comments. Do not include per-question analysis.'
 const DETAILED_REPORT_USER_MESSAGE =
     'You are an Interview Expert for a Consulting Firm. Using the provided interview context, return markdown with these exact top-level sections in order: 1) Initial Feedback, 2) Overall Rating (out of 10), 3) Answer Strengths, 4) Answer Weaknesses, 5) Future Directions For Improvement, 6) Detailed Per-Question Analysis. In section 6, create one subsection per answer using heading format "### Question N: <question>" and include: Candidate Answer Snapshot, Strengths, Weaknesses, Metric Interpretation, Suggested Improved Answer. The Suggested Improved Answer must describe an ideal answer and tailor it to CV/JD/company/job title context when relevant; if not relevant, explicitly state that no CV/JD tailoring applies. Keep feedback specific, concise, and evidence-based using transcript and metrics.'
 const LLM_PROVIDER_ENV_CONFIG = getLlmProviderConfig(import.meta.env)
@@ -870,6 +881,7 @@ async function downloadInterviewReportPdf({
     companyName,
     consultantFullName,
     jobTitle,
+    interviewType = '(not provided)',
     feedbackText,
     llmProviderLabel,
     llmModel,
@@ -1501,6 +1513,10 @@ async function downloadInterviewReportPdf({
         fontSize: 10,
         spacingAfter: 10,
     })
+    writeTextBlock(`Interview Type: ${sanitizeDisplayText(interviewType, '(not provided)')}`, {
+        fontSize: 10,
+        spacingAfter: 10,
+    })
 
     writeTextBlock(feedbackSectionTitle, {
         fontSize: 14,
@@ -1552,6 +1568,7 @@ function App() {
     const deepgramKeyInputRef = useRef(null)
     const amReportAbortControllerRef = useRef(null)
     const detailedReportAbortControllerRef = useRef(null)
+    const coachReportAbortControllerRef = useRef(null)
     const cancelPendingRecordingStartRef = useRef(false)
 
     const blinkTrackerRef = useRef({
@@ -3130,6 +3147,16 @@ function App() {
         )
     }
 
+    function normalizeCoachReportMarkdown(markdownText) {
+        const normalizedMarkdown = String(markdownText || '').replace(/\r\n?/g, '\n').trim()
+        const reportStartMatch = normalizedMarkdown.match(/^#{2,6}\s+Overall Verdict\b/im)
+        if (!reportStartMatch || reportStartMatch.index == null) {
+            return normalizedMarkdown
+        }
+
+        return normalizedMarkdown.slice(reportStartMatch.index).trim()
+    }
+
     function normalizeDetailedReportMarkdownForPdf(detailedMarkdown, summaries) {
         const normalizedMarkdown = normalizeDetailedReportQuestionHeadings(detailedMarkdown)
         const questionHeadingPattern =
@@ -3519,6 +3546,8 @@ function App() {
             return
         }
 
+        const interviewType = buildInterviewTypeLabel(selectedQuestionTypes)
+
         const summaryMarkdown = buildAnswerSummaryMarkdown(
             interviewSummaries,
             overallInterviewSummary,
@@ -3586,11 +3615,12 @@ function App() {
                             context: {
                                 question: 'Generate a detailed mock interview report with both overall summary and per-question analysis.',
                                 answer: summaryMarkdown,
-                                generationGuidelines: DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES,
+                                generationGuidelines: `${DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES} Interview type: ${interviewType}.`,
                                 metricSummary,
                                 companyName,
                                 consultantFullName,
                                 jobTitle,
+                                interviewType,
                                 jobDescription,
                                 cv,
                             },
@@ -3629,6 +3659,7 @@ function App() {
                     companyName,
                     consultantFullName,
                     jobTitle,
+                    interviewType,
                     feedbackText: normalizedDetailedPdfMarkdown,
                     llmProviderLabel: usedProviderLabel,
                     llmModel: usedModel,
@@ -3681,11 +3712,12 @@ function App() {
                             context: {
                                 question: 'Generate concise mock interview feedback and summary for the consultant at consulting firm. Do not include per question feedback. Ensure consistency with the detailed report provided in context.',
                                 answer: `${summaryMarkdown}\n\nDetailed report for alignment:\n${detailedReportText}`,
-                                generationGuidelines: `${DEFAULT_AM_REPORT_GENERATION_GUIDELINES}\n\nUse the detailed report context to keep conclusions, strengths, risks, and recommendations consistent across both outputs.`,
+                                generationGuidelines: `${DEFAULT_AM_REPORT_GENERATION_GUIDELINES}\n\nInterview type: ${interviewType}. Use the detailed report context to keep conclusions, strengths, risks, and recommendations consistent across both outputs.`,
                                 metricSummary,
                                 companyName,
                                 consultantFullName,
                                 jobTitle,
+                                interviewType,
                                 jobDescription,
                                 cv,
                             },
@@ -3715,6 +3747,7 @@ function App() {
                     companyName,
                     consultantFullName,
                     jobTitle,
+                    interviewType,
                     feedbackText: result.text,
                     llmProviderLabel: usedProviderLabel,
                     llmModel: usedModel,
@@ -3733,24 +3766,94 @@ function App() {
             }
         }
 
-        const generateCoachTask = async (amReportText) => {
-            const coachPdfDocument = await downloadInterviewReportPdf({
-                companyName,
-                consultantFullName,
-                jobTitle,
-                feedbackText: amReportText,
-                llmProviderLabel: 'Coach Report',
-                llmModel: 'coach-copy',
-                reportTitle: 'Coach Interview Feedback Report',
-                feedbackSectionTitle: 'Coach Feedback Output',
-                fileNamePrefix: 'coach-report',
-            })
+        const generateCoachTask = async (detailedReportText) => {
+            let result = null
+            let lastError = null
+            let usedProviderLabel = ''
+            let usedModel = ''
+            const controller = new AbortController()
+            coachReportAbortControllerRef.current = controller
 
-            if (!coachPdfDocument?.blob) {
-                throw new Error('Could not prepare coach report PDF.')
+            try {
+                for (let index = 0; index < providerCandidates.length; index += 1) {
+                    const providerConfig = providerCandidates[index]
+                    setCoachReportMarkdownPreview('')
+
+                    if (controller.signal.aborted) {
+                        const abortError = new Error('Coach report generation canceled.')
+                        abortError.code = 'request-aborted'
+                        throw abortError
+                    }
+
+                    const providerLabel = getLlmProviderUsageLabel(providerConfig.providerId)
+                    const resolvedModel = resolveReportProviderModel(providerConfig, 'coach')
+
+                    try {
+                        result = await sendInterviewChatMessage({
+                            providerId: providerConfig.providerId,
+                            apiKey: providerConfig.apiKey,
+                            model: resolvedModel,
+                            baseUrl: providerConfig.baseUrl,
+                            userMessage: COACH_REPORT_USER_MESSAGE,
+                            context: {
+                                question: 'Generate a standalone coach report for the completed mock interview.',
+                                answer: `${summaryMarkdown}\n\nDetailed report for evidence:\n${detailedReportText}`,
+                                generationGuidelines: `Interview type: ${interviewType}. Include Domain Knowledge Assessment only when Technical is selected, and use only technical topics explicitly asked and substantively answered in the interview. Include Behavioural Assessment only when Behavioural is selected. Return final markdown only; do not expose reasoning or repeat the instructions.`,
+                                metricSummary,
+                                companyName,
+                                consultantFullName,
+                                jobTitle,
+                                interviewType,
+                                questionTypes: selectedQuestionTypes,
+                                jobDescription,
+                                cv,
+                            },
+                            stream: true,
+                            onChunk: (fullText) => {
+                                setCoachReportMarkdownPreview(
+                                    normalizeCoachReportMarkdown(fullText || ''),
+                                )
+                            },
+                            signal: controller.signal,
+                        })
+                        usedProviderLabel = providerLabel
+                        usedModel = resolvedModel
+                        break
+                    } catch (error) {
+                        if (error?.code === 'request-aborted') {
+                            throw error
+                        }
+                        showLlmProviderHttpErrorToast(error, providerConfig.providerId)
+                        lastError = error
+                    }
+                }
+
+                if (!result?.text) {
+                    throw lastError || new Error('Could not generate coach report.')
+                }
+
+                const normalizedCoachText = normalizeCoachReportMarkdown(result.text)
+                const coachPdfDocument = await downloadInterviewReportPdf({
+                    companyName,
+                    consultantFullName,
+                    jobTitle,
+                    interviewType,
+                    feedbackText: normalizedCoachText,
+                    llmProviderLabel: usedProviderLabel,
+                    llmModel: usedModel,
+                    reportTitle: 'Coach Interview Feedback Report',
+                    feedbackSectionTitle: 'Coach Feedback Output',
+                    fileNamePrefix: 'coach-report',
+                })
+
+                if (!coachPdfDocument?.blob) {
+                    throw new Error('Could not prepare coach report PDF.')
+                }
+
+                return { text: normalizedCoachText, pdfDocument: coachPdfDocument }
+            } finally {
+                coachReportAbortControllerRef.current = null
             }
-
-            return { text: amReportText, pdfDocument: coachPdfDocument }
         }
 
         let hasDetailedPdf = false
@@ -3776,7 +3879,8 @@ function App() {
             setAmReportPdfFileName(amResult.pdfDocument.fileName || 'am-feedback-report.pdf')
             hasAmPdf = true
 
-            const coachResult = await generateCoachTask(amResult.text)
+            setCoachReportMarkdownPreview('Generating standalone coach report...')
+            const coachResult = await generateCoachTask(detailedResult.text)
             const coachPreviewUrl = URL.createObjectURL(coachResult.pdfDocument.blob)
             setCoachReportPdfPreviewUrl(coachPreviewUrl)
             setCoachReportPdfBlob(coachResult.pdfDocument.blob)
@@ -3837,6 +3941,10 @@ function App() {
     function cancelCombinedReportGeneration() {
         cancelAmReportGeneration()
         cancelDetailedReportGeneration()
+        const controller = coachReportAbortControllerRef.current
+        if (controller) {
+            controller.abort()
+        }
     }
 
     function downloadCurrentAmReportPdf() {
