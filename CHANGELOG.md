@@ -19,6 +19,21 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.24] - 2026-08-19
+
+### Added
+- Added question type selectors (`Behavioural`, `Technical`, `Situational`) to the Generate Questions count modal, including per-selection prompt steering and theoretical-scenario guidance for situational questions.
+- Added a `Use default keys` action inside expanded Advanced Settings to quickly reset API key fields to internal defaults.
+
+### Changed
+- Moved API key inputs to a dedicated `API Keys` section under an end-of-settings `Advanced Settings` toggle.
+- Updated fallback settings copy from `Use fallback when Deepgram key is missing` to `when Deepgram is not available`.
+- Updated API key field behavior so default internal key values are masked from display while remaining editable by users.
+- Preserved the previously selected question-type mix between Generate Questions modal opens instead of re-defaulting to all types each time.
+
+### Fixed
+- Disabled all Questions List mutation controls while questions are being generated to prevent in-progress list edits (clear, textarea edits, and per-item delete).
+
 ## [1.10.23] - 2026-08-12
 
 ### Changed
