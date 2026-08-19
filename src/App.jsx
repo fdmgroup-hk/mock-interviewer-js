@@ -2635,10 +2635,6 @@ function App() {
     const amReportPreviewScrollRef = useRef(null)
     const detailedReportPreviewScrollRef = useRef(null)
 
-    const isVideoStartDisabled =
-        isTranscribing || isPreparingRecording || cameraStatus !== 'ready'
-    const videoStartDisabledReason =
-        cameraStatus !== 'ready' ? 'Camera access is not allowed yet' : ''
     const isImportQuestionDisabled =
         isRecording || isTranscribing || isSpeakingQuestion || isPreparingRecording
 
@@ -2987,7 +2983,8 @@ function App() {
         hasQuestionsInList: parsedDrawerQuestions.length > 0,
         hasSummaryEntries: interviewSummaries.length > 0,
         defaultQuestionCount: DEFAULT_GENERATED_QUESTION_COUNT,
-        minQuestionCount: 2,
+        minQuestionCount:
+            cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? 6 : 2,
         maxQuestionCount: 25,
         onGenerateQuestions: (options) => {
             void generateQuestionsFromCvJd(options)
@@ -3366,7 +3363,7 @@ function App() {
         if (isGeneratingQuestions) return
 
         const normalizedQuestionCount = Math.max(
-            2,
+            cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? 6 : 2,
             Math.min(25, Number.parseInt(questionCount, 10) || DEFAULT_GENERATED_QUESTION_COUNT),
         )
         const shouldOpenQuestionsDrawer =
@@ -6894,33 +6891,22 @@ function App() {
                                             <div className="camera-recording-primary">
                                                 <button
                                                     type="button"
-                                                    className="btn ghost two-line-btn"
-                                                    onClick={() => startRecording('audio')}
-                                                    disabled={isTranscribing}
+                                                    className="btn two-line-btn"
+                                                    onClick={() =>
+                                                        startRecording(
+                                                            cameraStatus === 'ready' && cameraStreamRef.current
+                                                                ? 'video'
+                                                                : 'audio',
+                                                        )
+                                                    }
+                                                    disabled={isTranscribing || isPreparingRecording}
                                                 >
                                                     <span>
-                                                        Start Audio
+                                                        Start
                                                         <br />
                                                         Recording
                                                     </span>
                                                 </button>
-                                                <span
-                                                    className={`disabled-tooltip-wrap start-video-wrap${isVideoStartDisabled && videoStartDisabledReason ? ' has-tooltip' : ''}`}
-                                                    data-disabled-reason={videoStartDisabledReason}
-                                                >
-                                                    <button
-                                                        type="button"
-                                                        className="btn two-line-btn"
-                                                        onClick={() => startRecording('video')}
-                                                        disabled={isVideoStartDisabled}
-                                                    >
-                                                        <span>
-                                                            Start Video
-                                                            <br />
-                                                            Recording
-                                                        </span>
-                                                    </button>
-                                                </span>
                                             </div>
                                             {isDesktopViewport && (
                                                 <span
@@ -8483,18 +8469,20 @@ function App() {
                                                             )}
                                                         </div>
                                                         <div className="question-list-item-actions">
-                                                            <button
-                                                                type="button"
-                                                                className="btn"
-                                                                onClick={() => {
-                                                                    importQuestion(question, {
-                                                                        questionIndex: index,
-                                                                    })
-                                                                }}
-                                                                disabled={isImportQuestionDisabled}
-                                                            >
-                                                                Answer
-                                                            </button>
+                                                            {isPracticeMode && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn"
+                                                                    onClick={() => {
+                                                                        importQuestion(question, {
+                                                                            questionIndex: index,
+                                                                        })
+                                                                    }}
+                                                                    disabled={isImportQuestionDisabled}
+                                                                >
+                                                                    Answer
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 type="button"
                                                                 className="btn danger question-delete-btn"
@@ -9381,7 +9369,7 @@ function App() {
                 onQuestionTypeChange={setQuestionTypeSelected}
                 onConfirm={confirmGenerateQuestionsCountSelection}
                 onClose={closeGenerateQuestionsCountModal}
-                min={2}
+                min={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? 6 : 2}
                 max={25}
             />
 
