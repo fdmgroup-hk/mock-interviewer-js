@@ -16,6 +16,14 @@ import {
     sendInterviewChatMessage,
     validateLlmProviderApiKey,
 } from './llm/providers'
+import {
+    listSavedMockInterviews,
+    persistMockInterviewRecords,
+    requestGeneratedQuestionsFromBackend,
+    requestGeneratedReportFromBackend,
+    requestTranscriptionFromBackend,
+} from './backend/mvpApi'
+import { getSupabaseClient, isSupabaseMvpEnabled } from './backend/supabaseClient'
 import ChangelogModal from './components/modals/ChangelogModal'
 import ConfirmActionModal from './components/modals/ConfirmActionModal'
 import GenerateQuestionsCountModal from './components/modals/GenerateQuestionsCountModal'
@@ -26,6 +34,17 @@ import {
     normalizeEnumValue,
     truncateText,
 } from './utils/appHelpers'
+import {
+    AM_REPORT_USER_MESSAGE,
+    buildCoachReportGenerationGuidelines,
+    buildQuestionGenerationUserMessage,
+    buildQuestionTypePromptInstruction,
+    COACH_REPORT_USER_MESSAGE,
+    DEFAULT_AM_REPORT_GENERATION_GUIDELINES,
+    DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES,
+    DEFAULT_QUESTION_GENERATION_GUIDELINES,
+    DETAILED_REPORT_USER_MESSAGE,
+} from './prompts'
 import { parseRecentChangelogReleases } from './utils/changelog'
 import {
     getImportedQuestionsFromCurrentUrl,
@@ -51,7 +70,10 @@ import { useMockInterviewFlow } from './hooks/useMockInterviewFlow'
 import { useQuestionGeneration } from './hooks/useQuestionGeneration'
 import { useReportGeneration } from './hooks/useReportGeneration'
 import { buildAnswerSummaryMarkdown } from './utils/summaryMarkdown'
-import { extractTextFromPdfFile } from './utils/pdfText'
+import {
+    extractLinePreservedTextFromPdfFile,
+    extractTextFromPdfFile,
+} from './utils/pdfText'
 import { jsPDF } from 'jspdf'
 import { marked } from 'marked'
 import ReactMarkdown from 'react-markdown'
@@ -112,37 +134,6 @@ const PREVIOUS_ANSWERS_SOURCES = [
 const CAMERA_WORKFLOW_MODE_PRACTICE = 'practice'
 const CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW = 'mock-interview'
 const DEFAULT_GENERATED_QUESTION_COUNT = 10
-const DEFAULT_QUESTION_GENERATION_GUIDELINES =
-    'Generate concise, role-relevant interview questions at a slightly easier, recent-graduate level by default. Assume the candidate is a recent graduate unless the CV clearly demonstrates more professional experience, seniority, or specialized expertise. Prefer foundational concepts, approachable scenarios, and questions that can be answered using academic projects, internships, or early-career experience; only increase difficulty when the CV supports it. Cover technical depth, behavioral examples, and company alignment. Avoid duplicates. Return one question per line.'
-const DEFAULT_AM_REPORT_GENERATION_GUIDELINES =
-    'Generate a report for an account-manager at a consulting firm regarding the Answers provided in context, which were answered by a consultant. Provide feedback grounded in the interview answer transcript, answer metrics, JD and CV. Be specific, concise, and evidence-based. Do not generate per-question feedback. Use markdown only (no HTML) and follow this structure: ## Summary, ## Key Strengths, ## Key Weaknesses, ## Domain Knowledge Assessment, ## Recommended Coach Actions, ## Final Recommendation.'
-const DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES =
-    'Generate an in-depth report with an executive summary first, then detailed per-question analysis. For each question include strengths, weaknesses, metric interpretation, and a suggested improved answer. Tailor suggested answers to CV/JD/company/job title when relevant, and explicitly state when profile context is not relevant to that specific question.'
-const QUESTION_GENERATION_USER_MESSAGE = (questionCount, jdOnlyQuestionCount) =>
-    `Generate ${questionCount} concise mock interview questions based on the provided CV, job description, and company. If a job description is provided, include at least ${jdOnlyQuestionCount} questions that are derived only from the job description requirements and are not based on the CV. Return only the questions, one per line, no intro or explanation.`
-
-function buildQuestionTypePromptInstruction(questionTypes = {}) {
-    const selectedLabels = [
-        questionTypes.behavioural ? 'Behavioural' : '',
-        questionTypes.technical ? 'Technical' : '',
-        questionTypes.situational ? 'Situational' : '',
-    ].filter(Boolean)
-    const situationalTheoreticalInstruction =
-        'When generating situational questions, use theoretical scenario-based prompts (e.g., "What would you do if...") rather than asking about past experiences.'
-
-    if (!selectedLabels.length) {
-        return `Include a balanced mix of Behavioural, Technical, and Situational interview questions. ${situationalTheoreticalInstruction}`
-    }
-
-    if (selectedLabels.length === 1) {
-        if (questionTypes.situational) {
-            return `Generate only Situational interview questions. ${situationalTheoreticalInstruction}`
-        }
-        return `Generate only ${selectedLabels[0]} interview questions.`
-    }
-
-    return `Generate only these question types: ${selectedLabels.join(', ')}.${questionTypes.situational ? ` ${situationalTheoreticalInstruction}` : ''}`
-}
 
 function buildInterviewTypeLabel(questionTypes = {}) {
     return [
@@ -152,12 +143,6 @@ function buildInterviewTypeLabel(questionTypes = {}) {
     ].filter(Boolean).join(', ') || 'Not specified'
 }
 
-const AM_REPORT_USER_MESSAGE =
-    'You are an Interview Expert for a Consulting Firm. You are writing feedback for mock interview answers. Using interview Job Title, Q&A transcript, Q&A metrics, JD and CV, return concise, evidence-based markdown in this exact section order: 1) ## Overall Verdict, 2) ## Key Strengths, 3) ## Key Weaknesses, 4) ## Domain Knowledge Assessment, 5) ## Recommended Coach Actions, 6) ## Final Recommendation. Keep it account-manager friendly and do not include per-question analysis.'
-const COACH_REPORT_USER_MESSAGE =
-    'Write only the final coach report in markdown. Do not reveal analysis, reasoning, planning, deliberation, instruction restatement, or self-critique. Do not begin with a preamble. The first characters of your response must be "## Overall Verdict" and the response must end after "## Final Recommendation". Use only evidence present in the interview questions, interview answer transcripts, and answer metrics for performance judgments. CV, JD, company, and job title may provide context but must not create evidence of interview performance. Return concise markdown in exactly this order: ## Overall Verdict, ## Preparedness Grade, ## Key Strengths, ## Key Weaknesses, then conditionally ## Domain Knowledge Assessment if the interview type includes Technical, conditionally ## Behavioural Assessment if it includes Behavioural, ## Recommended Coach Actions, and ## Final Recommendation. Overall Verdict must contain bullet points, never one summary paragraph. Preparedness Grade must contain exactly one grade from A+ to F and one short sentence explaining the preparedness level and performance-based reason. For Key Strengths and Key Weaknesses, assess each of these six aspects exactly once: Clarity and Structure, Relevance and Depth, Evidence and Examples, Communication, Confidence and Engagement, and Impact and Conclusion. Each aspect must be classified exclusively as either a strength or a weakness. Put an aspect in Key Strengths only when a specific positive performance is directly evidenced in a non-empty answer; otherwise put it in Key Weaknesses only when a specific deficiency is evidenced. Never infer a positive from silence, missing answers, short answers, no hesitations, speaking speed, or the fact that an answer was recorded. If no genuine strengths are evidenced, write only "- None demonstrated." Do not mention Odoo or any other technology in Domain Knowledge Assessment unless that topic was explicitly asked about in an interview question and the candidate gave a substantive answer about it. Domain Knowledge Assessment must use subject or tool bullets with square-bracket proficiency tags and concise evidence comments. Behavioural Assessment must use competency bullets with square-bracket proficiency tags and concise evidence comments. Do not include per-question analysis.'
-const DETAILED_REPORT_USER_MESSAGE =
-    'You are an Interview Expert for a Consulting Firm. Using the provided interview context, return markdown with these exact top-level sections in order: 1) Initial Feedback, 2) Overall Rating (out of 10), 3) Answer Strengths, 4) Answer Weaknesses, 5) Future Directions For Improvement, 6) Detailed Per-Question Analysis. In section 6, create one subsection per answer using heading format "### Question N: <question>" and include: Candidate Answer Snapshot, Strengths, Weaknesses, Metric Interpretation, Suggested Improved Answer. The Suggested Improved Answer must describe an ideal answer and tailor it to CV/JD/company/job title context when relevant; if not relevant, explicitly state that no CV/JD tailoring applies. Keep feedback specific, concise, and evidence-based using transcript and metrics.'
 const LLM_PROVIDER_ENV_CONFIG = getLlmProviderConfig(import.meta.env)
 const OPENROUTER_BASE_URL = LLM_PROVIDER_ENV_CONFIG.openrouter.baseUrl
 const DEFAULT_NIM_BASE_URL = LLM_PROVIDER_ENV_CONFIG.nim.baseUrl
@@ -290,6 +275,15 @@ const EMPTY_GAZE_DIRECTION_COUNTS = {
     down: 0,
 }
 
+const CVJD_TOC_SECTIONS = [
+    { id: 'cvjd-section-consultant', label: 'Consultant Full Name' },
+    { id: 'cvjd-section-company', label: 'Company Name' },
+    { id: 'cvjd-section-job-title', label: 'Job Title' },
+    { id: 'cvjd-section-jd', label: 'Job Description (JD)' },
+    { id: 'cvjd-section-cv', label: 'CV' },
+    { id: 'cvjd-section-prior-feedback', label: 'Prior Feedback' },
+]
+
 function createDefaultCameraUiMetrics() {
     return {
         facesDetected: 0,
@@ -306,6 +300,34 @@ function validateKeyFormat(rawValue) {
     if (!value) return 'Enter your Deepgram API key.'
     if (value.length < 20) return 'Key looks too short. Check and retry.'
     if (!/^[-_A-Za-z0-9]+$/.test(value)) return 'Key contains unsupported characters.'
+    return ''
+}
+
+function getSupabaseAllowedEmailDomains() {
+    const rawDomains = String(import.meta.env.VITE_SUPABASE_ALLOWED_EMAIL_DOMAINS || 'fdmgroup.com')
+    return rawDomains
+        .split(',')
+        .map((domain) => domain.trim().toLowerCase())
+        .filter(Boolean)
+}
+
+function validateSupabaseSignInEmail(rawValue) {
+    const value = String(rawValue || '').trim().toLowerCase()
+    if (!value) return 'Enter your email address.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Enter a valid email address.'
+
+    const emailDomain = value.split('@')[1] || ''
+    const allowedDomains = getSupabaseAllowedEmailDomains()
+    const isAllowed = allowedDomains.some((allowedDomain) =>
+        emailDomain === allowedDomain || emailDomain.endsWith(`.${allowedDomain}`),
+    )
+
+    if (!isAllowed) {
+        return allowedDomains.length === 1
+            ? `Use your @${allowedDomains[0]} email to sign in.`
+            : `Use an approved work email (${allowedDomains.join(', ')}).`
+    }
+
     return ''
 }
 
@@ -1596,7 +1618,20 @@ function App() {
     const [banner, setBanner] = useState('')
     const [toast, setToast] = useState('')
     const [showKeyStatus, setShowKeyStatus] = useState(false)
+    const [supabaseUser, setSupabaseUser] = useState(null)
+    const [isSupabaseAuthBusy, setIsSupabaseAuthBusy] = useState(false)
+    const [supabaseSignInModalOpen, setSupabaseSignInModalOpen] = useState(false)
+    const [supabaseSignInEmailInput, setSupabaseSignInEmailInput] = useState('')
+    const [supabaseSignInEmailError, setSupabaseSignInEmailError] = useState('')
+    const [supabaseDashboardOpen, setSupabaseDashboardOpen] = useState(false)
+    const [supabaseDashboardLoading, setSupabaseDashboardLoading] = useState(false)
+    const [supabaseDashboardError, setSupabaseDashboardError] = useState('')
+    const [savedMockInterviews, setSavedMockInterviews] = useState([])
+    const [expandedSavedInterviewId, setExpandedSavedInterviewId] = useState('')
     const [isDeepgramKeyInvalid, setIsDeepgramKeyInvalid] = useState(false)
+    const [activeCvJdTocSection, setActiveCvJdTocSection] = useState(
+        CVJD_TOC_SECTIONS[0].id,
+    )
     const [darkMode, setDarkMode] = useState(() => getSavedValue(STORAGE_THEME) === 'dark')
     const [themeTogglePressCount, setThemeTogglePressCount] = useState(0)
     const [fallbackWithoutDeepgramKey, setFallbackWithoutDeepgramKey] = useState(
@@ -1704,6 +1739,7 @@ function App() {
     const [priorFeedbackText, setPriorFeedbackText] = useState(() =>
         getSavedValue(STORAGE_PRIOR_FEEDBACK_TEXT),
     )
+    const [isImportingCvFile, setIsImportingCvFile] = useState(false)
     const [isImportingFeedbackPdf, setIsImportingFeedbackPdf] = useState(false)
     const [companyNameInput, setCompanyNameInput] = useState(() =>
         getSavedValue(STORAGE_COMPANY_NAME),
@@ -1925,7 +1961,10 @@ function App() {
     const historyAudioRef = useRef(null)
     const selectedHistoryMediaRef = useRef({ audioUrl: '', videoUrl: '' })
     const interviewerUploadInputRef = useRef(null)
+    const cvFileInputRef = useRef(null)
     const feedbackPdfInputRef = useRef(null)
+    const supabaseSignInInputRef = useRef(null)
+    const cvJdContentScrollRef = useRef(null)
 
     const hasKey = savedKey.length > 0
     const speechFallbackConfig = useMemo(
@@ -2081,6 +2120,45 @@ function App() {
     }, [toast])
 
     useEffect(() => {
+        if (!isSupabaseMvpEnabled()) {
+            setSupabaseUser(null)
+            return undefined
+        }
+
+        const supabase = getSupabaseClient()
+        if (!supabase) {
+            setSupabaseUser(null)
+            return undefined
+        }
+
+        let isMounted = true
+
+        supabase.auth
+            .getSession()
+            .then(({ data }) => {
+                if (!isMounted) return
+                setSupabaseUser(data?.session?.user || null)
+            })
+            .catch((error) => {
+                if (!isMounted) return
+                console.warn('Supabase session check failed.', error)
+                setSupabaseUser(null)
+            })
+
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (!isMounted) return
+            setSupabaseUser(session?.user || null)
+        })
+
+        return () => {
+            isMounted = false
+            subscription.unsubscribe()
+        }
+    }, [])
+
+    useEffect(() => {
         if (!banner) return undefined
 
         const isNoTranscriptBanner = /No transcript was returned(?: by Deepgram)?/i.test(banner)
@@ -2092,6 +2170,52 @@ function App() {
 
         return () => window.clearTimeout(timerId)
     }, [banner])
+
+    useEffect(() => {
+        if (!cvJdModalOpen) return
+        setActiveCvJdTocSection(CVJD_TOC_SECTIONS[0].id)
+    }, [cvJdModalOpen])
+
+    function handleCvJdModalScroll(event) {
+        const container = event.currentTarget
+        if (!container) return
+
+        const scrollTop = container.scrollTop
+        const activationOffset = 80
+        let nextActiveSectionId = CVJD_TOC_SECTIONS[0].id
+
+        for (const section of CVJD_TOC_SECTIONS) {
+            const element = container.querySelector(`#${section.id}`)
+            if (!element) continue
+
+            if (element.offsetTop - activationOffset <= scrollTop) {
+                nextActiveSectionId = section.id
+            }
+        }
+
+        if (nextActiveSectionId !== activeCvJdTocSection) {
+            setActiveCvJdTocSection(nextActiveSectionId)
+        }
+    }
+
+    function scrollToCvJdSection(sectionId) {
+        const container = cvJdContentScrollRef.current
+        if (!container) return
+
+        const target = container.querySelector(`#${sectionId}`)
+        if (!target) return
+
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        setActiveCvJdTocSection(sectionId)
+    }
+
+    useEffect(() => {
+        if (!supabaseSignInModalOpen) return
+        window.requestAnimationFrame(() => {
+            supabaseSignInInputRef.current?.focus()
+            supabaseSignInInputRef.current?.select()
+        })
+    }, [supabaseSignInModalOpen])
 
     useEffect(() => {
         function onBeforeUnload(event) {
@@ -2715,6 +2839,39 @@ function App() {
             setToast('Could not read this PDF file.')
         } finally {
             setIsImportingFeedbackPdf(false)
+        }
+    }
+
+    async function handleCvFileImport(event) {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        if (!file) return
+
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+        const isText = file.type === 'text/plain' || /\.(txt|md)$/i.test(file.name)
+
+        if (!isPdf && !isText) {
+            setToast('Select a PDF or TXT file for CV import.')
+            return
+        }
+
+        setIsImportingCvFile(true)
+        try {
+            const extractedText = isPdf
+                ? await extractLinePreservedTextFromPdfFile(file)
+                : await file.text()
+
+            if (!String(extractedText || '').trim()) {
+                setToast('Could not find any text in this file.')
+                return
+            }
+
+            setCvText(extractedText)
+            setToast('CV imported.')
+        } catch {
+            setToast('Could not read this CV file.')
+        } finally {
+            setIsImportingCvFile(false)
         }
     }
 
@@ -3384,9 +3541,15 @@ function App() {
             return
         }
 
+        const supabaseMvpEnabled = isSupabaseMvpEnabled()
+        if (supabaseMvpEnabled && !supabaseUser) {
+            setToast('Sign in first to generate questions with Supabase backend.')
+            return
+        }
+
         const providerCandidates = getLlmProviderCandidatesForCurrentMode()
 
-        if (!providerCandidates.length) {
+        if (!supabaseMvpEnabled && !providerCandidates.length) {
             showLlmProviderMissingKeyToast()
             return
         }
@@ -3411,6 +3574,69 @@ function App() {
 
         setIsGeneratingQuestions(true)
         try {
+            if (supabaseMvpEnabled) {
+                try {
+                    const result = await requestGeneratedQuestionsFromBackend({
+                        questionCount: normalizedQuestionCount,
+                        jdOnlyQuestionCount,
+                        questionTypes,
+                        context: {
+                            question: 'Generate interview questions from profile context.',
+                            answer: 'Use the provided CV/JD/company/prior feedback fields only.',
+                            generationGuidelines: [
+                                DEFAULT_QUESTION_GENERATION_GUIDELINES,
+                                questionTypePromptInstruction,
+                                'If JD is present, include some JD-only questions that are not CV-derived.',
+                                priorFeedback
+                                    ? 'Prior interview feedback is provided below. Prioritize questions that let the candidate practice and address the weaknesses and recommended coach actions called out in that feedback.'
+                                    : '',
+                            ]
+                                .filter(Boolean)
+                                .join(' '),
+                            metricSummary: 'n/a',
+                            companyName,
+                            jobTitle,
+                            cv,
+                            jobDescription,
+                            priorFeedback,
+                        },
+                        onChunk: (fullText) => {
+                            setQuestionsBulkInput(fullText || 'Generating questions...')
+                            const generatedCount = parseGeneratedQuestions(fullText).length
+                            const boundedCount = Math.min(normalizedQuestionCount, generatedCount)
+                            setGeneratedQuestionProgressCount((prev) =>
+                                boundedCount > prev ? boundedCount : prev,
+                            )
+                        },
+                    })
+
+                    const parsedQuestions = parseGeneratedQuestions(result.text)
+                    if (!parsedQuestions.length) {
+                        setToast('No questions were generated. Try again.')
+                        return
+                    }
+
+                    setQuestionsBulkInput(parsedQuestions.join('\n'))
+                    setGeneratedQuestionProgressCount(
+                        Math.min(normalizedQuestionCount, parsedQuestions.length),
+                    )
+                    setActiveQuestionListIndex(0)
+                    setNextQuestionCursor(0)
+                    setQuestionInput(parsedQuestions[0] || '')
+                    setToast(`Generated ${parsedQuestions.length} question(s).`)
+                    return
+                } catch (backendError) {
+                    if (!providerCandidates.length) {
+                        throw backendError
+                    }
+
+                    console.warn('Supabase questions generation failed, falling back to browser provider flow.', backendError)
+                    setToast(
+                        'Supabase generation is unavailable. Falling back to browser provider mode for this request.',
+                    )
+                }
+            }
+
             let result = null
             let lastError = null
 
@@ -3434,7 +3660,7 @@ function App() {
                         apiKey: providerConfig.apiKey,
                         model: providerConfig.model,
                         baseUrl: providerConfig.baseUrl,
-                        userMessage: QUESTION_GENERATION_USER_MESSAGE(
+                        userMessage: buildQuestionGenerationUserMessage(
                             normalizedQuestionCount,
                             jdOnlyQuestionCount,
                         ),
@@ -3522,8 +3748,17 @@ function App() {
             return
         }
 
+        const supabaseMvpEnabled = isSupabaseMvpEnabled()
+        const shouldPersistMockRecords =
+            supabaseMvpEnabled &&
+            cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW
+        if (supabaseMvpEnabled && !supabaseUser) {
+            setToast('Sign in first to generate reports with Supabase backend.')
+            return
+        }
+
         const providerCandidates = getLlmProviderCandidatesForCurrentMode()
-        if (!providerCandidates.length) {
+        if (!supabaseMvpEnabled && !providerCandidates.length) {
             showLlmProviderMissingKeyToast()
             return
         }
@@ -3561,7 +3796,11 @@ function App() {
         setCoachReportMarkdownPreview('Waiting for AM report...')
         setDetailedReportMarkdownPreview('Generating detailed report...')
         setConfirmCloseCombinedReportPdfOpen(false)
-        setToast('Generating detailed report first, then AM report...')
+        setToast(
+            supabaseMvpEnabled
+                ? 'Generating reports via Supabase backend...'
+                : 'Generating detailed report first, then AM report...',
+        )
 
         const generateDetailedTask = async () => {
             let result = null
@@ -3572,7 +3811,48 @@ function App() {
             detailedReportAbortControllerRef.current = controller
 
             try {
+                if (supabaseMvpEnabled) {
+                    try {
+                        result = await requestGeneratedReportFromBackend({
+                            mode: 'detailed',
+                            userMessage: DETAILED_REPORT_USER_MESSAGE,
+                            context: {
+                                question: 'Generate a detailed mock interview report with both overall summary and per-question analysis.',
+                                answer: summaryMarkdown,
+                                generationGuidelines: `${DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES} Interview type: ${interviewType}.`,
+                                metricSummary,
+                                companyName,
+                                consultantFullName,
+                                jobTitle,
+                                interviewType,
+                                jobDescription,
+                                cv,
+                            },
+                            onChunk: (fullText) => {
+                                setDetailedReportMarkdownPreview(
+                                    normalizeDetailedReportQuestionHeadings(fullText || ''),
+                                )
+                            },
+                        })
+                        usedProviderLabel = result.providerId === 'supabase'
+                            ? 'Supabase Backend'
+                            : getLlmProviderUsageLabel(result.providerId)
+                        usedModel = result.model || 'supabase-default'
+                    } catch (backendError) {
+                        if (!providerCandidates.length) {
+                            throw backendError
+                        }
+
+                        console.warn('Supabase detailed report generation failed, falling back to browser provider flow.', backendError)
+                        setToast(
+                            'Supabase detailed report generation is unavailable. Falling back to browser provider mode for this request.',
+                        )
+                    }
+                }
+
                 for (let index = 0; index < providerCandidates.length; index += 1) {
+                    if (result?.text) break
+
                     const providerConfig = providerCandidates[index]
                     setDetailedReportMarkdownPreview('')
 
@@ -3654,7 +3934,12 @@ function App() {
                     throw new Error('Could not prepare detailed report PDF.')
                 }
 
-                return { text: normalizedDetailedText, pdfDocument }
+                return {
+                    text: normalizedDetailedText,
+                    pdfDocument,
+                    provider: usedProviderLabel,
+                    model: usedModel,
+                }
             } finally {
                 detailedReportAbortControllerRef.current = null
             }
@@ -3669,7 +3954,46 @@ function App() {
             amReportAbortControllerRef.current = controller
 
             try {
+                if (supabaseMvpEnabled) {
+                    try {
+                        result = await requestGeneratedReportFromBackend({
+                            mode: 'am',
+                            userMessage: AM_REPORT_USER_MESSAGE,
+                            context: {
+                                question: 'Generate concise mock interview feedback and summary for the consultant at consulting firm. Do not include per question feedback. Ensure consistency with the detailed report provided in context.',
+                                answer: `${summaryMarkdown}\n\nDetailed report for alignment:\n${detailedReportText}`,
+                                generationGuidelines: `${DEFAULT_AM_REPORT_GENERATION_GUIDELINES}\n\nInterview type: ${interviewType}. Use the detailed report context to keep conclusions, strengths, risks, and recommendations consistent across both outputs.`,
+                                metricSummary,
+                                companyName,
+                                consultantFullName,
+                                jobTitle,
+                                interviewType,
+                                jobDescription,
+                                cv,
+                            },
+                            onChunk: (fullText) => {
+                                setAmReportMarkdownPreview(fullText || '')
+                            },
+                        })
+                        usedProviderLabel = result.providerId === 'supabase'
+                            ? 'Supabase Backend'
+                            : getLlmProviderUsageLabel(result.providerId)
+                        usedModel = result.model || 'supabase-default'
+                    } catch (backendError) {
+                        if (!providerCandidates.length) {
+                            throw backendError
+                        }
+
+                        console.warn('Supabase AM report generation failed, falling back to browser provider flow.', backendError)
+                        setToast(
+                            'Supabase AM report generation is unavailable. Falling back to browser provider mode for this request.',
+                        )
+                    }
+                }
+
                 for (let index = 0; index < providerCandidates.length; index += 1) {
+                    if (result?.text) break
+
                     const providerConfig = providerCandidates[index]
                     setAmReportMarkdownPreview('')
 
@@ -3742,7 +4066,12 @@ function App() {
                     throw new Error('Could not prepare AM feedback PDF.')
                 }
 
-                return { text: result.text, pdfDocument }
+                return {
+                    text: result.text,
+                    pdfDocument,
+                    provider: usedProviderLabel,
+                    model: usedModel,
+                }
             } finally {
                 amReportAbortControllerRef.current = null
             }
@@ -3757,7 +4086,49 @@ function App() {
             coachReportAbortControllerRef.current = controller
 
             try {
+                if (supabaseMvpEnabled) {
+                    try {
+                        result = await requestGeneratedReportFromBackend({
+                            mode: 'coach',
+                            userMessage: COACH_REPORT_USER_MESSAGE,
+                            context: {
+                                question: 'Generate a standalone coach report for the completed mock interview.',
+                                answer: `${summaryMarkdown}\n\nDetailed report for evidence:\n${detailedReportText}`,
+                                generationGuidelines: buildCoachReportGenerationGuidelines(interviewType),
+                                metricSummary,
+                                companyName,
+                                consultantFullName,
+                                jobTitle,
+                                interviewType,
+                                questionTypes: selectedQuestionTypes,
+                                jobDescription,
+                                cv,
+                            },
+                            onChunk: (fullText) => {
+                                setCoachReportMarkdownPreview(
+                                    normalizeCoachReportMarkdown(fullText || ''),
+                                )
+                            },
+                        })
+                        usedProviderLabel = result.providerId === 'supabase'
+                            ? 'Supabase Backend'
+                            : getLlmProviderUsageLabel(result.providerId)
+                        usedModel = result.model || 'supabase-default'
+                    } catch (backendError) {
+                        if (!providerCandidates.length) {
+                            throw backendError
+                        }
+
+                        console.warn('Supabase coach report generation failed, falling back to browser provider flow.', backendError)
+                        setToast(
+                            'Supabase coach report generation is unavailable. Falling back to browser provider mode for this request.',
+                        )
+                    }
+                }
+
                 for (let index = 0; index < providerCandidates.length; index += 1) {
+                    if (result?.text) break
+
                     const providerConfig = providerCandidates[index]
                     setCoachReportMarkdownPreview('')
 
@@ -3780,7 +4151,7 @@ function App() {
                             context: {
                                 question: 'Generate a standalone coach report for the completed mock interview.',
                                 answer: `${summaryMarkdown}\n\nDetailed report for evidence:\n${detailedReportText}`,
-                                generationGuidelines: `Interview type: ${interviewType}. Include Domain Knowledge Assessment only when Technical is selected, and use only technical topics explicitly asked and substantively answered in the interview. Include Behavioural Assessment only when Behavioural is selected. Return final markdown only; do not expose reasoning or repeat the instructions.`,
+                                generationGuidelines: buildCoachReportGenerationGuidelines(interviewType),
                                 metricSummary,
                                 companyName,
                                 consultantFullName,
@@ -3832,7 +4203,12 @@ function App() {
                     throw new Error('Could not prepare coach report PDF.')
                 }
 
-                return { text: normalizedCoachText, pdfDocument: coachPdfDocument }
+                return {
+                    text: normalizedCoachText,
+                    pdfDocument: coachPdfDocument,
+                    provider: usedProviderLabel,
+                    model: usedModel,
+                }
             } finally {
                 coachReportAbortControllerRef.current = null
             }
@@ -3880,6 +4256,56 @@ function App() {
                 coachResult.pdfDocument.blob,
                 coachResult.pdfDocument.fileName || 'coach-report.pdf',
             )
+
+            if (shouldPersistMockRecords) {
+                const selectedQuestionTypeNames = [
+                    selectedQuestionTypes.behavioural ? 'behavioural' : '',
+                    selectedQuestionTypes.technical ? 'technical' : '',
+                    selectedQuestionTypes.situational ? 'situational' : '',
+                ].filter(Boolean)
+                const defaultQuestionType =
+                    selectedQuestionTypeNames.length === 1
+                        ? selectedQuestionTypeNames[0]
+                        : 'mixed'
+
+                try {
+                    await persistMockInterviewRecords({
+                        sessionTitle: companyName
+                            ? `Mock Interview - ${companyName}`
+                            : 'Mock Interview Session',
+                        interviewType,
+                        questions: parsedDrawerQuestions.map((questionText, index) => ({
+                            position: index,
+                            questionType: defaultQuestionType,
+                            questionText,
+                            source: 'generated',
+                        })),
+                        answerSummaries: interviewSummaries.map((entry) => ({
+                            question: entry?.question || '',
+                            transcript: entry?.transcript || '',
+                            summaryMarkdown: '',
+                            metrics:
+                                entry?.metrics && typeof entry.metrics === 'object'
+                                    ? entry.metrics
+                                    : {},
+                            capturedAt: entry?.capturedAt || null,
+                        })),
+                        reports: [
+                            {
+                                reportType: 'am',
+                                status: 'ready',
+                                model: amResult.model || '',
+                                provider: amResult.provider || '',
+                                contentMarkdown: amResult.text,
+                                errorMessage: '',
+                            },
+                        ],
+                    })
+                } catch (persistenceError) {
+                    console.warn('Supabase SQL persistence failed for mock interview reports.', persistenceError)
+                    setToast('Reports generated, but saving mock interview records to Supabase failed.')
+                }
+            }
 
             setCombinedReportModalOpen(false)
             setCombinedReportPdfPreviewOpen(true)
@@ -4910,6 +5336,142 @@ function App() {
             deepgramKeyInputRef.current?.focus()
             deepgramKeyInputRef.current?.select()
         })
+    }
+
+    function openSupabaseSignInModal() {
+        if (isSupabaseAuthBusy) return
+        setSupabaseSignInEmailInput('')
+        setSupabaseSignInEmailError('')
+        setSupabaseSignInModalOpen(true)
+    }
+
+    function closeSupabaseSignInModal() {
+        if (isSupabaseAuthBusy) return
+        setSupabaseSignInModalOpen(false)
+        setSupabaseSignInEmailError('')
+    }
+
+    async function requestSupabaseSignIn(rawEmail) {
+        if (isSupabaseAuthBusy) return
+
+        const supabase = getSupabaseClient()
+        if (!supabase) {
+            setToast('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
+            return
+        }
+
+        const email = String(rawEmail || '').trim().toLowerCase()
+        const validationError = validateSupabaseSignInEmail(email)
+        if (validationError) {
+            setSupabaseSignInEmailError(validationError)
+            return
+        }
+
+        const authRedirectUrl =
+            String(import.meta.env.VITE_SUPABASE_AUTH_REDIRECT_URL || '').trim() ||
+            window.location.origin
+
+        setIsSupabaseAuthBusy(true)
+        try {
+            const { error } = await supabase.auth.signInWithOtp({
+                email,
+                options: {
+                    emailRedirectTo: authRedirectUrl,
+                },
+            })
+
+            if (error) {
+                throw error
+            }
+
+            setSupabaseSignInModalOpen(false)
+            setSupabaseSignInEmailInput('')
+            setSupabaseSignInEmailError('')
+            setToast('Sign-in link sent. Check your email inbox.')
+        } catch (error) {
+            const message = error?.message || 'Could not start Supabase sign-in.'
+            setSupabaseSignInEmailError(message)
+            setToast(message)
+        } finally {
+            setIsSupabaseAuthBusy(false)
+        }
+    }
+
+    async function requestSupabaseSignOut() {
+        if (isSupabaseAuthBusy) return
+
+        const supabase = getSupabaseClient()
+        if (!supabase) {
+            setSupabaseUser(null)
+            return
+        }
+
+        setIsSupabaseAuthBusy(true)
+        try {
+            const { error } = await supabase.auth.signOut()
+            if (error) {
+                throw error
+            }
+
+            setSupabaseUser(null)
+            setSupabaseDashboardOpen(false)
+            setSavedMockInterviews([])
+            setExpandedSavedInterviewId('')
+            setToast('Signed out.')
+        } catch (error) {
+            setToast(error?.message || 'Could not sign out.')
+        } finally {
+            setIsSupabaseAuthBusy(false)
+        }
+    }
+
+    async function refreshSavedMockInterviews() {
+        if (!supabaseUser) {
+            setSupabaseDashboardError('Sign in to view your saved mock interviews.')
+            setSavedMockInterviews([])
+            setExpandedSavedInterviewId('')
+            return
+        }
+
+        setSupabaseDashboardLoading(true)
+        setSupabaseDashboardError('')
+
+        try {
+            const entries = await listSavedMockInterviews({ limit: 30 })
+            setSavedMockInterviews(entries)
+
+            if (!entries.length) {
+                setExpandedSavedInterviewId('')
+                return
+            }
+
+            const hasExpanded = entries.some((entry) => entry.id === expandedSavedInterviewId)
+            if (!hasExpanded) {
+                setExpandedSavedInterviewId(entries[0].id)
+            }
+        } catch (error) {
+            setSupabaseDashboardError(error?.message || 'Could not load saved mock interviews.')
+            setSavedMockInterviews([])
+            setExpandedSavedInterviewId('')
+        } finally {
+            setSupabaseDashboardLoading(false)
+        }
+    }
+
+    function closeSupabaseDashboard() {
+        setSupabaseDashboardOpen(false)
+        setSupabaseDashboardError('')
+    }
+
+    async function openSupabaseDashboard() {
+        if (isSupabaseAuthBusy) return
+        if (!supabaseUser) {
+            setToast('Sign in to view saved mock interviews.')
+            return
+        }
+
+        setSupabaseDashboardOpen(true)
+        await refreshSavedMockInterviews()
     }
 
     // Keep this as a hoisted function to avoid temporal dead zone issues in earlier effects.
@@ -5961,15 +6523,34 @@ function App() {
     }
 
     async function transcribeAudioBlob(audioBlob) {
+        if (isSupabaseMvpEnabled()) {
+            if (!supabaseUser) {
+                throw new Error('Sign in first to use Supabase transcription.')
+            }
+
+            try {
+                const result = await requestTranscriptionFromBackend({ audioBlob })
+                return result
+            } catch (backendError) {
+                if (!hasSttProvider) {
+                    throw backendError
+                }
+
+                console.warn('Supabase transcription failed, falling back to browser provider flow.', backendError)
+                setToast(
+                    'Supabase transcription is unavailable. Falling back to browser provider mode for this recording.',
+                )
+            }
+        }
+
         const endpoint =
             import.meta.env.VITE_DEEPGRAM_LISTEN_URL || DEFAULT_DEEPGRAM_LISTEN_URL
-        const result = await transcribeWithFallback({
+        return transcribeWithFallback({
             audioBlob,
             deepgramKey: savedKey,
             deepgramEndpoint: endpoint,
             fallbackConfig: speechFallbackConfig,
         })
-        return result
     }
 
     function validateLlmProviderApiBaseUrl(baseUrl) {
@@ -6459,8 +7040,10 @@ function App() {
     const isCameraAccessAllowed = hasCameraAccess || cameraPermissionState === 'granted'
     const isMockInterviewFocusMode = !isPracticeMode && isMockInterviewStarted
 
-    function handleThemeModeToggle() {
-        setDarkMode((prev) => !prev)
+    function handleThemeModeSelect(nextDarkMode) {
+        setDarkMode(nextDarkMode)
+        if (nextDarkMode === darkMode) return
+
         setThemeTogglePressCount((prev) => {
             const next = prev + 1
             if (next === 50) {
@@ -6547,31 +7130,58 @@ function App() {
                     <div className="topbar-title-row">
                         <h1>Mock Interviewer</h1>
                     </div>
-                    <div className="topbar-mode-center">
-                        <div className="camera-mode-toggle topbar-mode-toggle" role="group" aria-label="Interview mode">
-                            <button
-                                type="button"
-                                className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE ? ' is-active' : ' ghost'}`}
-                                onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_PRACTICE)}
-                                aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE}
-                            >
-                                Practice Mode
-                            </button>
-                            <button
-                                type="button"
-                                className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? ' is-active' : ' ghost'}`}
-                                onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW)}
-                                aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW}
-                            >
-                                Mock Interview Mode
-                            </button>
-                        </div>
-                    </div>
                     <div className="topbar-actions">
+                        {isSupabaseMvpEnabled() ? (
+                            supabaseUser ? (
+                                <>
+                                    <span
+                                        className="topbar-user-email"
+                                        aria-label={`Signed in as ${supabaseUser.email || 'user'}`}
+                                        title={supabaseUser.email || 'Signed in'}
+                                    >
+                                        {truncateText(supabaseUser.email || 'Signed in', 24)}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="btn ghost"
+                                        onClick={() => {
+                                            void openSupabaseDashboard()
+                                        }}
+                                        disabled={isSupabaseAuthBusy}
+                                        title="View saved mock interviews"
+                                    >
+                                        Dashboard
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn ghost"
+                                        onClick={() => {
+                                            void requestSupabaseSignOut()
+                                        }}
+                                        disabled={isSupabaseAuthBusy}
+                                        title="Sign out of Supabase"
+                                    >
+                                        {isSupabaseAuthBusy ? 'Signing out...' : 'Sign Out'}
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={() => {
+                                        openSupabaseSignInModal()
+                                    }}
+                                    disabled={isSupabaseAuthBusy}
+                                    title="Sign in to Mock Interviewer Tool"
+                                >
+                                    {isSupabaseAuthBusy ? 'Sending Link...' : 'Sign In'}
+                                </button>
+                            )
+                        ) : null}
                         <button
                             type="button"
                             className="btn ghost theme-toggle"
-                            onClick={handleThemeModeToggle}
+                            onClick={() => handleThemeModeSelect(!darkMode)}
                             aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
                             aria-pressed={darkMode}
                             title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -6594,6 +7204,182 @@ function App() {
                     </div>
                 </div>
             </header>
+
+            {supabaseSignInModalOpen && (
+                <div
+                    className="overlay"
+                    role="presentation"
+                    onPointerDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            closeSupabaseSignInModal()
+                        }
+                    }}
+                >
+                    <div
+                        className="modal compact supabase-signin-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="supabase-signin-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <h2 id="supabase-signin-title">Sign in to Mock Interviewer Tool</h2>
+                        <p className="muted">Use your work email to receive a secure sign-in link.</p>
+                        <label className="label" htmlFor="supabase-signin-email">Work Email</label>
+                        <input
+                            ref={supabaseSignInInputRef}
+                            id="supabase-signin-email"
+                            type="email"
+                            className={supabaseSignInEmailError ? 'field field-error' : 'field'}
+                            value={supabaseSignInEmailInput}
+                            onChange={(event) => {
+                                setSupabaseSignInEmailInput(event.target.value)
+                                if (supabaseSignInEmailError) setSupabaseSignInEmailError('')
+                            }}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    void requestSupabaseSignIn(supabaseSignInEmailInput)
+                                }
+                            }}
+                            autoComplete="email"
+                            placeholder="name@fdmgroup.com"
+                            aria-describedby={supabaseSignInEmailError ? 'supabase-signin-email-error' : undefined}
+                        />
+                        {supabaseSignInEmailError && (
+                            <p id="supabase-signin-email-error" className="error-text" aria-live="polite">
+                                {supabaseSignInEmailError}
+                            </p>
+                        )}
+                        <div className="actions">
+                            <button
+                                type="button"
+                                className="btn"
+                                onClick={() => {
+                                    void requestSupabaseSignIn(supabaseSignInEmailInput)
+                                }}
+                                disabled={isSupabaseAuthBusy}
+                            >
+                                {isSupabaseAuthBusy ? 'Sending Link...' : 'Send Sign-In Link'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn ghost"
+                                onClick={closeSupabaseSignInModal}
+                                disabled={isSupabaseAuthBusy}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {supabaseDashboardOpen && (
+                <div
+                    className="overlay"
+                    role="presentation"
+                    onPointerDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            closeSupabaseDashboard()
+                        }
+                    }}
+                >
+                    <div
+                        className="modal supabase-dashboard-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="supabase-dashboard-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="supabase-dashboard-head">
+                            <h2 id="supabase-dashboard-title">Saved Mock Interviews</h2>
+                            <div className="actions wrap">
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={() => {
+                                        void refreshSavedMockInterviews()
+                                    }}
+                                    disabled={supabaseDashboardLoading}
+                                >
+                                    {supabaseDashboardLoading ? 'Refreshing...' : 'Refresh'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={closeSupabaseDashboard}
+                                    disabled={supabaseDashboardLoading}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+
+                        {supabaseDashboardError && (
+                            <p className="error-text" aria-live="polite">
+                                {supabaseDashboardError}
+                            </p>
+                        )}
+
+                        {!supabaseDashboardError && supabaseDashboardLoading && (
+                            <p className="muted">Loading saved interviews...</p>
+                        )}
+
+                        {!supabaseDashboardError && !supabaseDashboardLoading && !savedMockInterviews.length && (
+                            <p className="muted">No saved mock interviews found yet.</p>
+                        )}
+
+                        {!supabaseDashboardError && !supabaseDashboardLoading && savedMockInterviews.length > 0 && (
+                            <div className="saved-interviews-list" role="list">
+                                {savedMockInterviews.map((entry) => {
+                                    const isExpanded = expandedSavedInterviewId === entry.id
+                                    const createdLabel = entry.createdAt
+                                        ? new Date(entry.createdAt).toLocaleString()
+                                        : 'Unknown date'
+
+                                    return (
+                                        <article className="saved-interview-item" role="listitem" key={entry.id}>
+                                            <button
+                                                type="button"
+                                                className="saved-interview-toggle"
+                                                onClick={() => {
+                                                    setExpandedSavedInterviewId((prev) =>
+                                                        prev === entry.id ? '' : entry.id,
+                                                    )
+                                                }}
+                                                aria-expanded={isExpanded}
+                                            >
+                                                <span>{entry.title}</span>
+                                                <span className="saved-interview-meta">{createdLabel}</span>
+                                            </button>
+
+                                            {isExpanded && (
+                                                <div className="saved-interview-body">
+                                                    <p className="saved-interview-fields">
+                                                        Type: {entry.interviewType} | Status: {entry.status}
+                                                    </p>
+                                                    {entry.amReportProvider || entry.amReportModel ? (
+                                                        <p className="saved-interview-fields">
+                                                            AM Source: {entry.amReportProvider || 'unknown'} {entry.amReportModel ? `(${entry.amReportModel})` : ''}
+                                                        </p>
+                                                    ) : null}
+                                                    {entry.amReportMarkdown ? (
+                                                        <pre className="saved-interview-markdown">
+                                                            {entry.amReportMarkdown}
+                                                        </pre>
+                                                    ) : (
+                                                        <p className="muted">No AM markdown report found for this session.</p>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </article>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className={`desktop-chat-layout${isDesktopViewport ? ' is-desktop' : ''}`}>
                 <main
@@ -8258,116 +9044,172 @@ function App() {
                         </div>
 
                         <div className="question-modal-body cvjd-modal-body">
-                            <div className="question-modal-inner cvjd-modal-inner">
-                                <label htmlFor="cvjd-consultant-full-name" className="label cvjd-label">
-                                    Consultant Full Name
-                                </label>
-                                <input
-                                    id="cvjd-consultant-full-name"
-                                    type="text"
-                                    className="field cvjd-field"
-                                    value={consultantFullNameInput}
-                                    onChange={(event) => setConsultantFullNameInput(event.target.value)}
-                                    placeholder="Example: Alex Morgan"
-                                    autoComplete="off"
-                                    disabled={isCvJdModalEditLocked}
-                                />
-                                <label htmlFor="cvjd-company" className="label cvjd-label">
-                                    Company Name
-                                </label>
-                                <input
-                                    id="cvjd-company"
-                                    type="text"
-                                    className="field cvjd-field"
-                                    value={companyNameInput}
-                                    onChange={(event) => setCompanyNameInput(event.target.value)}
-                                    placeholder="Example: Contoso"
-                                    autoComplete="off"
-                                    disabled={isCvJdModalEditLocked}
-                                />
-
-                                <label htmlFor="cvjd-job-title" className="label cvjd-label">
-                                    Job Title
-                                </label>
-                                <input
-                                    id="cvjd-job-title"
-                                    type="text"
-                                    className="field cvjd-field"
-                                    value={jobTitleInput}
-                                    onChange={(event) => setJobTitleInput(event.target.value)}
-                                    placeholder="Example: Senior Consultant"
-                                    autoComplete="off"
-                                    disabled={isCvJdModalEditLocked}
-                                />
-
-                                <label htmlFor="cvjd-jd" className="label cvjd-label">
-                                    Job Description (JD)
-                                </label>
-                                <textarea
-                                    id="cvjd-jd"
-                                    className="field cvjd-textarea"
-                                    value={jdText}
-                                    onChange={(event) => setJdText(event.target.value)}
-                                    rows={12}
-                                    placeholder="Paste the job description here"
-                                    disabled={isCvJdModalEditLocked}
-                                />
-
-                                <label htmlFor="cvjd-cv" className="label cvjd-label">
-                                    CV
-                                </label>
-                                <textarea
-                                    id="cvjd-cv"
-                                    className="field cvjd-textarea"
-                                    value={cvText}
-                                    onChange={(event) => setCvText(event.target.value)}
-                                    rows={12}
-                                    placeholder="Paste your CV here"
-                                    disabled={isCvJdModalEditLocked}
-                                />
-
-                                <div className="cvjd-label-row">
-                                    <label htmlFor="cvjd-prior-feedback" className="label cvjd-label">
-                                        Prior Feedback (optional)
-                                    </label>
-                                    <div className="cvjd-prior-feedback-actions">
-                                        <button
-                                            type="button"
-                                            className="btn ghost"
-                                            onClick={() => feedbackPdfInputRef.current?.click()}
-                                            disabled={isCvJdModalEditLocked || isImportingFeedbackPdf}
-                                            title="Import a previously downloaded feedback report PDF"
-                                        >
-                                            {isImportingFeedbackPdf ? 'Importing...' : 'Import Feedback PDF'}
-                                        </button>
-                                        {Boolean(priorFeedbackText.trim()) && (
+                            <div className="cvjd-layout">
+                                <aside className="cvjd-toc" aria-label="CV/JD sections">
+                                    <p className="cvjd-toc-title">Contents</p>
+                                    <div className="cvjd-toc-list" role="navigation" aria-label="CV/JD table of contents">
+                                        {CVJD_TOC_SECTIONS.map((section) => (
                                             <button
+                                                key={section.id}
                                                 type="button"
-                                                className="btn ghost"
-                                                onClick={clearPriorFeedbackText}
-                                                disabled={isCvJdModalEditLocked}
+                                                className={`cvjd-toc-link${activeCvJdTocSection === section.id ? ' is-active' : ''}`}
+                                                onClick={() => scrollToCvJdSection(section.id)}
+                                                aria-current={activeCvJdTocSection === section.id ? 'true' : undefined}
                                             >
-                                                Clear
+                                                {section.label}
                                             </button>
-                                        )}
-                                        <input
-                                            ref={feedbackPdfInputRef}
-                                            type="file"
-                                            accept="application/pdf,.pdf"
-                                            className="sr-only"
-                                            onChange={handleFeedbackPdfImport}
-                                        />
+                                        ))}
                                     </div>
+                                </aside>
+
+                                <div
+                                    className="question-modal-inner cvjd-modal-inner"
+                                    ref={cvJdContentScrollRef}
+                                    onScroll={handleCvJdModalScroll}
+                                >
+                                    <section id="cvjd-section-consultant" className="cvjd-section">
+                                        <label htmlFor="cvjd-consultant-full-name" className="label cvjd-label">
+                                            Consultant Full Name
+                                        </label>
+                                        <input
+                                            id="cvjd-consultant-full-name"
+                                            type="text"
+                                            className="field cvjd-field"
+                                            value={consultantFullNameInput}
+                                            onChange={(event) => setConsultantFullNameInput(event.target.value)}
+                                            placeholder="Example: Alex Morgan"
+                                            autoComplete="off"
+                                            disabled={isCvJdModalEditLocked}
+                                        />
+                                    </section>
+
+                                    <section id="cvjd-section-company" className="cvjd-section">
+                                        <label htmlFor="cvjd-company" className="label cvjd-label">
+                                            Company Name
+                                        </label>
+                                        <input
+                                            id="cvjd-company"
+                                            type="text"
+                                            className="field cvjd-field"
+                                            value={companyNameInput}
+                                            onChange={(event) => setCompanyNameInput(event.target.value)}
+                                            placeholder="Example: Contoso"
+                                            autoComplete="off"
+                                            disabled={isCvJdModalEditLocked}
+                                        />
+                                    </section>
+
+                                    <section id="cvjd-section-job-title" className="cvjd-section">
+                                        <label htmlFor="cvjd-job-title" className="label cvjd-label">
+                                            Job Title
+                                        </label>
+                                        <input
+                                            id="cvjd-job-title"
+                                            type="text"
+                                            className="field cvjd-field"
+                                            value={jobTitleInput}
+                                            onChange={(event) => setJobTitleInput(event.target.value)}
+                                            placeholder="Example: Senior Consultant"
+                                            autoComplete="off"
+                                            disabled={isCvJdModalEditLocked}
+                                        />
+                                    </section>
+
+                                    <section id="cvjd-section-jd" className="cvjd-section">
+                                        <label htmlFor="cvjd-jd" className="label cvjd-label">
+                                            Job Description (JD)
+                                        </label>
+                                        <textarea
+                                            id="cvjd-jd"
+                                            className="field cvjd-textarea"
+                                            value={jdText}
+                                            onChange={(event) => setJdText(event.target.value)}
+                                            rows={12}
+                                            placeholder="Paste the job description here"
+                                            disabled={isCvJdModalEditLocked}
+                                        />
+                                    </section>
+
+                                    <section id="cvjd-section-cv" className="cvjd-section">
+                                        <div className="cvjd-label-row">
+                                            <label htmlFor="cvjd-cv" className="label cvjd-label">
+                                                CV
+                                            </label>
+                                            <div className="cvjd-prior-feedback-actions">
+                                                <button
+                                                    type="button"
+                                                    className="btn ghost"
+                                                    onClick={() => cvFileInputRef.current?.click()}
+                                                    disabled={isCvJdModalEditLocked || isImportingCvFile}
+                                                    title="Import CV content from PDF or TXT"
+                                                >
+                                                    {isImportingCvFile ? 'Importing...' : 'Upload CV'}
+                                                </button>
+                                                <input
+                                                    ref={cvFileInputRef}
+                                                    type="file"
+                                                    accept="application/pdf,.pdf,text/plain,.txt,.md"
+                                                    className="sr-only"
+                                                    onChange={handleCvFileImport}
+                                                />
+                                            </div>
+                                        </div>
+                                        <textarea
+                                            id="cvjd-cv"
+                                            className="field cvjd-textarea"
+                                            value={cvText}
+                                            onChange={(event) => setCvText(event.target.value)}
+                                            rows={12}
+                                            placeholder="Paste your CV here"
+                                            disabled={isCvJdModalEditLocked}
+                                        />
+                                    </section>
+
+                                    <section id="cvjd-section-prior-feedback" className="cvjd-section">
+                                        <div className="cvjd-label-row">
+                                            <label htmlFor="cvjd-prior-feedback" className="label cvjd-label">
+                                                Prior Feedback (optional)
+                                            </label>
+                                            <div className="cvjd-prior-feedback-actions">
+                                                <button
+                                                    type="button"
+                                                    className="btn ghost"
+                                                    onClick={() => feedbackPdfInputRef.current?.click()}
+                                                    disabled={isCvJdModalEditLocked || isImportingFeedbackPdf}
+                                                    title="Import a previously downloaded feedback report PDF"
+                                                >
+                                                    {isImportingFeedbackPdf ? 'Importing...' : 'Import Feedback PDF'}
+                                                </button>
+                                                {Boolean(priorFeedbackText.trim()) && (
+                                                    <button
+                                                        type="button"
+                                                        className="btn ghost"
+                                                        onClick={clearPriorFeedbackText}
+                                                        disabled={isCvJdModalEditLocked}
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                )}
+                                                <input
+                                                    ref={feedbackPdfInputRef}
+                                                    type="file"
+                                                    accept="application/pdf,.pdf"
+                                                    className="sr-only"
+                                                    onChange={handleFeedbackPdfImport}
+                                                />
+                                            </div>
+                                        </div>
+                                        <textarea
+                                            id="cvjd-prior-feedback"
+                                            className="field cvjd-textarea"
+                                            value={priorFeedbackText}
+                                            onChange={(event) => setPriorFeedbackText(event.target.value)}
+                                            rows={12}
+                                            placeholder="Import a prior feedback report PDF, or paste feedback text here. New questions will target the weaknesses it identifies."
+                                            disabled={isCvJdModalEditLocked}
+                                        />
+                                    </section>
                                 </div>
-                                <textarea
-                                    id="cvjd-prior-feedback"
-                                    className="field cvjd-textarea"
-                                    value={priorFeedbackText}
-                                    onChange={(event) => setPriorFeedbackText(event.target.value)}
-                                    rows={12}
-                                    placeholder="Import a prior feedback report PDF, or paste feedback text here. New questions will target the weaknesses it identifies."
-                                    disabled={isCvJdModalEditLocked}
-                                />
                             </div>
                         </div>
                     </div>
@@ -8554,6 +9396,32 @@ function App() {
                             </div>
                         </div>
                         <div className="settings-modal-body">
+                            <div className="settings-section">
+                                <h3 className="settings-section-title">Interview Mode</h3>
+                                <div
+                                    className="camera-mode-toggle settings-mode-toggle"
+                                    role="group"
+                                    aria-label="Interview mode"
+                                >
+                                    <button
+                                        type="button"
+                                        className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE ? ' is-active' : ' ghost'}`}
+                                        onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_PRACTICE)}
+                                        aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE}
+                                    >
+                                        Practice Mode
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`btn topbar-mode-btn${cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? ' is-active' : ' ghost'}`}
+                                        onClick={() => setCameraWorkflowMode(CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW)}
+                                        aria-pressed={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW}
+                                    >
+                                        Mock Interview Mode
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="settings-section">
                                 <h3 className="settings-section-title">Speech &amp; Transcription</h3>
                                 <div className="actions wrap key-actions-row">

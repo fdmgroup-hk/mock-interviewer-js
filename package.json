@@ -12,6 +12,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@supabase/supabase-js": "^2.57.4",
         "@huggingface/transformers": "^3.6.3",
         "@mediapipe/tasks-vision": "^1.0.0",
         "jspdf": "^4.2.1",

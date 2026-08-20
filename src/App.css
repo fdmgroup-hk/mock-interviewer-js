@@ -209,6 +209,105 @@ h3 {
     flex: 0 0 auto;
 }
 
+.topbar-user-email {
+    color: var(--ink-700);
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.supabase-dashboard-modal {
+    width: min(960px, calc(100vw - 2rem));
+    max-height: min(86vh, 860px);
+    overflow-y: auto;
+}
+
+.supabase-dashboard-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.supabase-dashboard-head h2 {
+    margin: 0;
+}
+
+.saved-interviews-list {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.7rem;
+}
+
+.saved-interview-item {
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--surface-elev-1);
+    overflow: hidden;
+}
+
+.saved-interview-toggle {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--ink-900);
+    cursor: pointer;
+    padding: 0.72rem 0.82rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    text-align: left;
+    font: inherit;
+    font-weight: 700;
+}
+
+.saved-interview-toggle:hover {
+    background: color-mix(in srgb, var(--surface-elev-2), transparent 25%);
+}
+
+.saved-interview-toggle:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: -3px;
+}
+
+.saved-interview-meta {
+    color: var(--ink-700);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.saved-interview-body {
+    border-top: 1px solid var(--line-strong);
+    padding: 0.72rem 0.82rem;
+}
+
+.saved-interview-fields {
+    margin: 0 0 0.45rem;
+    color: var(--ink-700);
+    font-size: 0.88rem;
+}
+
+.saved-interview-markdown {
+    margin: 0;
+    padding: 0.72rem;
+    border-radius: 10px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-elev-2);
+    color: var(--ink-900);
+    font-family: 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow: auto;
+}
+
 .topbar-icon {
     font-size: 1rem;
     line-height: 1;
@@ -553,7 +652,7 @@ h3 {
     justify-content: center;
 }
 
-.mock-question-list-label-desktop > span {
+.mock-question-list-label-desktop>span {
     display: block;
 }
 
@@ -731,10 +830,7 @@ a.btn {
     line-height: 1;
 }
 
-.btn.settings-cog {
-    font-size: 0.9rem;
-}
-
+.btn.settings-cog,
 .btn.theme-toggle {
     display: inline-flex;
     align-items: center;
@@ -826,7 +922,7 @@ a.btn {
         overflow-y: auto;
         overflow-x: hidden;
         z-index: 14;
-        box-shadow: 0 16px 34px var(--shadow-soft);
+        box-shadow: none;
     }
 
     .layout.session-floating-layout .panel.session.floating-session-panel.is-minimized {
@@ -993,7 +1089,7 @@ a.btn {
     aspect-ratio: 4 / 3;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.42);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+    box-shadow: none;
     background: rgba(16, 31, 37, 0.88);
 }
 
@@ -1108,7 +1204,7 @@ a.btn {
     font-size: 0.5rem;
     line-height: 1;
     transform: translateY(1px);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+    text-shadow: none;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -1158,7 +1254,7 @@ a.btn {
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
     background: #232323;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+    box-shadow: none;
     overflow: hidden;
 }
 
@@ -1469,7 +1565,7 @@ a.btn {
 
 .history-source-btn.active {
     border-color: var(--action);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--action), white 20%);
+    box-shadow: none;
     background: color-mix(in srgb, var(--action), transparent 88%);
 }
 
@@ -1536,7 +1632,7 @@ a.btn {
     border: 1px solid var(--line);
     border-radius: 12px;
     background: color-mix(in srgb, var(--card-bg), white 6%);
-    box-shadow: 0 16px 36px var(--shadow-soft);
+    box-shadow: none;
     padding: 0.8rem;
     display: grid;
     grid-template-rows: auto auto 1fr;
@@ -1651,7 +1747,7 @@ a.btn {
 
 .history-overview-item.active {
     border-color: var(--action);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--action), white 20%);
+    box-shadow: none;
 }
 
 .summary-overall-header-btn {
@@ -1682,7 +1778,7 @@ a.btn {
 
 .summary-overall-header-btn.active {
     border-color: var(--action);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--action), white 20%);
+    box-shadow: none;
 }
 
 .summary-overall-header-btn:focus-visible {
@@ -1816,7 +1912,7 @@ a.btn {
 
 .history-speed-btn.active {
     border-color: var(--action);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--action), white 20%);
+    box-shadow: none;
 }
 
 .history-metrics-grid {
@@ -1875,11 +1971,15 @@ a.btn {
     border: 1px solid var(--line);
     background: var(--card-bg);
     padding: 1rem;
-    box-shadow: 0 24px 60px var(--shadow-soft);
+    box-shadow: none;
 }
 
 .modal.compact {
     width: min(480px, 100%);
+}
+
+.supabase-signin-modal .actions {
+    margin-top: 20px;
 }
 
 .question-count-modal {
@@ -2756,21 +2856,99 @@ a.btn {
     justify-content: flex-end;
 }
 
+.cvjd-modal {
+    overflow: visible;
+}
+
 .cvjd-modal-body {
     min-height: 0;
-    overflow: auto;
+    overflow: visible;
+}
+
+.cvjd-layout {
+    min-height: 0;
+    display: block;
+    position: relative;
+    align-items: start;
+}
+
+.cvjd-toc {
+    position: absolute;
+    left: calc(-210px - 0.9rem - 10px);
+    top: calc(0.2rem - 2px);
+    width: 210px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--ghost-bg);
+    padding: 0.65rem;
+    z-index: 2;
+}
+
+.cvjd-toc-title {
+    margin: 0 0 0.35rem;
+    font-size: 0.82rem;
+    color: var(--ink-700);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.cvjd-toc-list {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.cvjd-toc-link {
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 0.4rem 0.45rem;
+    border-radius: 8px;
+    color: var(--ink-700);
+    font: inherit;
+    font-size: 0.88rem;
+    line-height: 1.25;
+    cursor: pointer;
+}
+
+.cvjd-toc-link:hover {
+    background: color-mix(in srgb, var(--ghost-bg), var(--action) 10%);
+    color: var(--ink-900);
+}
+
+.cvjd-toc-link:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+}
+
+.cvjd-toc-link.is-active {
+    background: color-mix(in srgb, var(--action), white 86%);
+    color: var(--action);
+    font-weight: 700;
 }
 
 .cvjd-modal-inner {
+    border: none;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.3rem;
+    gap: 0.55rem;
     align-content: start;
-    padding: 0.1rem 0.2rem 0.45rem;
+    padding: 0.1rem calc(0.2rem + 10px) 0.45rem;
+    max-height: min(72vh, calc(100vh - 12rem));
+    overflow: auto;
+}
+
+.cvjd-section {
+    display: grid;
+    gap: 0.35rem;
+    scroll-margin-top: 0.5rem;
+}
+
+.cvjd-section+.cvjd-section {
+    padding-top: 0.7rem;
 }
 
 .cvjd-label {
-    margin-top: 0.55rem;
+    margin-top: 0;
 }
 
 .cvjd-label-row {
@@ -2779,7 +2957,7 @@ a.btn {
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 0.4rem;
-    margin-top: 0.55rem;
+    margin-top: 0;
 }
 
 .cvjd-label-row .cvjd-label {
@@ -2802,6 +2980,23 @@ a.btn {
     min-height: 0;
     height: 100%;
     resize: vertical;
+}
+
+@media (max-width: 860px) {
+    .cvjd-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.65rem;
+    }
+
+    .cvjd-toc {
+        position: static;
+        width: auto;
+    }
+
+    .cvjd-toc-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .question-drawer,
@@ -2832,7 +3027,7 @@ a.btn {
     border: 1px solid var(--line);
     border-radius: 12px;
     background: color-mix(in srgb, var(--card-bg), white 6%);
-    box-shadow: 0 16px 36px var(--shadow-soft);
+    box-shadow: none;
     padding: 0.8rem;
     display: grid;
     grid-template-rows: auto auto auto 1fr;
@@ -3145,7 +3340,7 @@ a.btn {
     padding: 0.55rem 0.7rem;
     border-radius: 10px;
     border: 1px solid var(--line);
-    box-shadow: 0 10px 24px var(--shadow-soft);
+    box-shadow: none;
     z-index: 29;
 }
 
