@@ -113,7 +113,7 @@ const CAMERA_WORKFLOW_MODE_PRACTICE = 'practice'
 const CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW = 'mock-interview'
 const DEFAULT_GENERATED_QUESTION_COUNT = 10
 const DEFAULT_QUESTION_GENERATION_GUIDELINES =
-    'Generate concise, role-relevant interview questions. Cover technical depth, behavioral examples, and company alignment. Avoid duplicates. Return one question per line.'
+    'Generate concise, role-relevant interview questions at a slightly easier, recent-graduate level by default. Assume the candidate is a recent graduate unless the CV clearly demonstrates more professional experience, seniority, or specialized expertise. Prefer foundational concepts, approachable scenarios, and questions that can be answered using academic projects, internships, or early-career experience; only increase difficulty when the CV supports it. Cover technical depth, behavioral examples, and company alignment. Avoid duplicates. Return one question per line.'
 const DEFAULT_AM_REPORT_GENERATION_GUIDELINES =
     'Generate a report for an account-manager at a consulting firm regarding the Answers provided in context, which were answered by a consultant. Provide feedback grounded in the interview answer transcript, answer metrics, JD and CV. Be specific, concise, and evidence-based. Do not generate per-question feedback. Use markdown only (no HTML) and follow this structure: ## Summary, ## Key Strengths, ## Key Weaknesses, ## Domain Knowledge Assessment, ## Recommended Coach Actions, ## Final Recommendation.'
 const DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES =
