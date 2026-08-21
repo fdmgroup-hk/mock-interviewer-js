@@ -32,6 +32,11 @@ jobs:
         run: npm run build
         env:
           VITE_NIM_BASE_URL: ${{ secrets.VITE_NIM_BASE_URL }}
+          VITE_SUPABASE_MVP_ENABLED: 'true'
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_AUTH_REDIRECT_URL: ${{ secrets.VITE_SUPABASE_AUTH_REDIRECT_URL }}
+          VITE_SUPABASE_ALLOWED_EMAIL_DOMAINS: ${{ secrets.VITE_SUPABASE_ALLOWED_EMAIL_DOMAINS }}
 
       - name: Include GPL-3.0 license in published site
         run: cp LICENSE dist/LICENSE
