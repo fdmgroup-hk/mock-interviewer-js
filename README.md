@@ -135,6 +135,11 @@ npm run test
 npm run build
 ```
 
+## Migration naming convention
+
+- Use `YYYYMMDD_HHMMSS_description.sql` for new migration filenames.
+- Example: `20260821_143500_add_admin_lookup.sql`
+
 ## Manual build and deploy (no GitHub Actions)
 
 Use this when you want to publish manually to any static host.

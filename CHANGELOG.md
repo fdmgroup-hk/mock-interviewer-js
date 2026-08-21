@@ -25,7 +25,7 @@ Use this template for future releases:
 - Added a topbar `Dashboard` action (next to `Sign Out`) for signed-in Supabase users to browse saved mock interviews.
 - Added a Supabase dashboard modal that lists recent saved sessions and shows the saved AM report content in markdown text.
 - Added a new prompt centralization module at `src/prompts.js` and rewired App prompt usage to import from it.
-- Added a migration `supabase/migrations/20260819_disable_user_deletes.sql` to remove user delete policies on interview persistence tables.
+- Added a migration `supabase/migrations/20260819_220245_disable_user_deletes.sql` to remove user delete policies on interview persistence tables.
 
 ### Changed
 - Updated Supabase report persistence to save only the AM report record (`report_type: am`) as markdown text (`content_markdown`).
