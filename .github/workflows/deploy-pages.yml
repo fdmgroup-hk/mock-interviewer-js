@@ -40,7 +40,7 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           personal_token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
-          external_repository: haydenmlh/webcam-interview-analyzer-page
+          external_repository: fdmgroup-hk/webcam-interview-analyzer-page
           publish_branch: gh-pages
           publish_dir: ./dist
           cname: interview.haydenmlh.com

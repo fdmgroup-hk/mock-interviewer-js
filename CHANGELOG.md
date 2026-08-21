@@ -19,6 +19,29 @@ Use this template for future releases:
 -
 ```
 
+## [1.10.26] - 2026-08-19
+
+### Added
+- Added a topbar `Dashboard` action (next to `Sign Out`) for signed-in Supabase users to browse saved mock interviews.
+- Added a Supabase dashboard modal that lists recent saved sessions and shows the saved AM report content in markdown text.
+- Added a new prompt centralization module at `src/prompts.js` and rewired App prompt usage to import from it.
+- Added a migration `supabase/migrations/20260819_220245_disable_user_deletes.sql` to remove user delete policies on interview persistence tables.
+
+### Changed
+- Updated Supabase report persistence to save only the AM report record (`report_type: am`) as markdown text (`content_markdown`).
+- Updated topbar signed-in email display from button styling to plain text and made it bold for clearer identity visibility.
+
+### Fixed
+- Normalized app version metadata by bumping runtime version to `1.10.26`.
+
+## [1.10.25] - 2026-08-19
+
+### Added
+- Added a root `.env.local.example` template with required Supabase MVP variables and optional LLM/Deepgram/MediaPipe/Hugging Face environment overrides for local testing.
+
+### Changed
+- Added a new `Local environment setup` section in the README with step-by-step Supabase local configuration and restart guidance.
+
 ## [1.10.24] - 2026-08-19
 
 ### Added

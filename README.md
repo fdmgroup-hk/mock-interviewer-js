@@ -2,11 +2,18 @@
 
 Mock Interviewer is a React + Vite web app for practicing interview answers with live camera posture cues, audio/video recording, and Deepgram-powered transcription.
 
-Current app version: 1.10.24
+Current app version: 1.10.26
 
 ## Highlights
 
 - Deepgram BYOK settings with local key persistence and optional server-side validation endpoint
+- Added a topbar `Dashboard` button (for signed-in Supabase users) to view past saved mock interviews
+- Added a Supabase dashboard modal that lists saved sessions and displays AM report markdown text
+- Supabase persistence now stores only the AM report in markdown text format (`content_markdown`)
+- Added a dedicated `src/prompts.js` module to centralize question/report prompt templates and builders
+- Added a Supabase migration to disable user-initiated deletes on interview persistence tables by removing per-user delete RLS policies
+- Added a root `.env.local.example` template for local Supabase MVP testing and optional provider endpoint overrides
+- Added a `Local environment setup` section with required Supabase env variables and local restart instructions
 - Advanced Settings now groups API keys at the end of Settings, including a `Use default keys` quick-reset action
 - Default internal API key values are masked in Settings while key fields remain editable
 - Generate Questions now supports selectable question types (`Behavioural`, `Technical`, `Situational`) with persisted selections and type-specific prompt steering
@@ -91,6 +98,28 @@ Alternative dev server command:
 npm run dev
 ```
 
+## Local environment setup
+
+1. Copy `.env.local.example` to `.env.local` in the project root.
+2. Set required Supabase values:
+	- `VITE_SUPABASE_MVP_ENABLED=true`
+	- `VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co`
+	- `VITE_SUPABASE_ANON_KEY=<your-anon-key>`
+3. For localhost magic-link sign-in, add your local callback:
+	- Optional env override: `VITE_SUPABASE_AUTH_REDIRECT_URL=http://localhost:5173`
+	- In Supabase Dashboard -> Authentication -> URL Configuration, add `http://localhost:5173` (and `http://127.0.0.1:5173` if used) to Additional Redirect URLs.
+4. Optional frontend domain validator:
+	- `VITE_SUPABASE_ALLOWED_EMAIL_DOMAINS=fdmgroup.com`
+	- Supports comma-separated domains and subdomains.
+5. Keep optional variables as needed (NIM/OpenRouter/Deepgram/MediaPipe/Hugging Face).
+6. Restart the dev server after any env changes:
+
+```bash
+npm start
+```
+
+When configured correctly, the top bar shows `Sign In`/`Sign Out` controls for Supabase auth.
+
 ## Run with Docker
 
 ```bash
@@ -105,6 +134,11 @@ npm run lint
 npm run test
 npm run build
 ```
+
+## Migration naming convention
+
+- Use `YYYYMMDD_HHMMSS_description.sql` for new migration filenames.
+- Example: `20260821_143500_add_admin_lookup.sql`
 
 ## Manual build and deploy (no GitHub Actions)
 
