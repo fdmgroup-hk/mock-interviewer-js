@@ -51,6 +51,7 @@ import { useMockInterviewFlow } from './hooks/useMockInterviewFlow'
 import { useQuestionGeneration } from './hooks/useQuestionGeneration'
 import { useReportGeneration } from './hooks/useReportGeneration'
 import { buildAnswerSummaryMarkdown } from './utils/summaryMarkdown'
+import { extractTextFromPdfFile } from './utils/pdfText'
 import { jsPDF } from 'jspdf'
 import { marked } from 'marked'
 import ReactMarkdown from 'react-markdown'
@@ -73,6 +74,7 @@ const STORAGE_AUTO_SAVE_MEDIA_TO_FOLDER = 'mia.autoSaveMediaToFolder'
 const STORAGE_DEEPGRAM_DEBUG = 'mia.deepgram.debug'
 const STORAGE_CV_TEXT = 'mia.cvText'
 const STORAGE_JD_TEXT = 'mia.jdText'
+const STORAGE_PRIOR_FEEDBACK_TEXT = 'mia.priorFeedbackText'
 const STORAGE_COMPANY_NAME = 'mia.companyName'
 const STORAGE_CONSULTANT_FULL_NAME = 'mia.consultantFullName'
 const STORAGE_JOB_TITLE = 'mia.jobTitle'
@@ -111,15 +113,49 @@ const CAMERA_WORKFLOW_MODE_PRACTICE = 'practice'
 const CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW = 'mock-interview'
 const DEFAULT_GENERATED_QUESTION_COUNT = 10
 const DEFAULT_QUESTION_GENERATION_GUIDELINES =
-    'Generate concise, role-relevant interview questions. Cover technical depth, behavioral examples, and company alignment. Avoid duplicates. Return one question per line.'
+    'Generate concise, role-relevant interview questions at a slightly easier, recent-graduate level by default. Assume the candidate is a recent graduate unless the CV clearly demonstrates more professional experience, seniority, or specialized expertise. Prefer foundational concepts, approachable scenarios, and questions that can be answered using academic projects, internships, or early-career experience; only increase difficulty when the CV supports it. Cover technical depth, behavioral examples, and company alignment. Avoid duplicates. Return one question per line.'
 const DEFAULT_AM_REPORT_GENERATION_GUIDELINES =
     'Generate a report for an account-manager at a consulting firm regarding the Answers provided in context, which were answered by a consultant. Provide feedback grounded in the interview answer transcript, answer metrics, JD and CV. Be specific, concise, and evidence-based. Do not generate per-question feedback. Use markdown only (no HTML) and follow this structure: ## Summary, ## Key Strengths, ## Key Weaknesses, ## Domain Knowledge Assessment, ## Recommended Coach Actions, ## Final Recommendation.'
 const DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES =
     'Generate an in-depth report with an executive summary first, then detailed per-question analysis. For each question include strengths, weaknesses, metric interpretation, and a suggested improved answer. Tailor suggested answers to CV/JD/company/job title when relevant, and explicitly state when profile context is not relevant to that specific question.'
 const QUESTION_GENERATION_USER_MESSAGE = (questionCount, jdOnlyQuestionCount) =>
     `Generate ${questionCount} concise mock interview questions based on the provided CV, job description, and company. If a job description is provided, include at least ${jdOnlyQuestionCount} questions that are derived only from the job description requirements and are not based on the CV. Return only the questions, one per line, no intro or explanation.`
+
+function buildQuestionTypePromptInstruction(questionTypes = {}) {
+    const selectedLabels = [
+        questionTypes.behavioural ? 'Behavioural' : '',
+        questionTypes.technical ? 'Technical' : '',
+        questionTypes.situational ? 'Situational' : '',
+    ].filter(Boolean)
+    const situationalTheoreticalInstruction =
+        'When generating situational questions, use theoretical scenario-based prompts (e.g., "What would you do if...") rather than asking about past experiences.'
+
+    if (!selectedLabels.length) {
+        return `Include a balanced mix of Behavioural, Technical, and Situational interview questions. ${situationalTheoreticalInstruction}`
+    }
+
+    if (selectedLabels.length === 1) {
+        if (questionTypes.situational) {
+            return `Generate only Situational interview questions. ${situationalTheoreticalInstruction}`
+        }
+        return `Generate only ${selectedLabels[0]} interview questions.`
+    }
+
+    return `Generate only these question types: ${selectedLabels.join(', ')}.${questionTypes.situational ? ` ${situationalTheoreticalInstruction}` : ''}`
+}
+
+function buildInterviewTypeLabel(questionTypes = {}) {
+    return [
+        questionTypes.behavioural ? 'Behavioural' : '',
+        questionTypes.technical ? 'Technical' : '',
+        questionTypes.situational ? 'Situational' : '',
+    ].filter(Boolean).join(', ') || 'Not specified'
+}
+
 const AM_REPORT_USER_MESSAGE =
     'You are an Interview Expert for a Consulting Firm. You are writing feedback for mock interview answers. Using interview Job Title, Q&A transcript, Q&A metrics, JD and CV, return concise, evidence-based markdown in this exact section order: 1) ## Overall Verdict, 2) ## Key Strengths, 3) ## Key Weaknesses, 4) ## Domain Knowledge Assessment, 5) ## Recommended Coach Actions, 6) ## Final Recommendation. Keep it account-manager friendly and do not include per-question analysis.'
+const COACH_REPORT_USER_MESSAGE =
+    'Write only the final coach report in markdown. Do not reveal analysis, reasoning, planning, deliberation, instruction restatement, or self-critique. Do not begin with a preamble. The first characters of your response must be "## Overall Verdict" and the response must end after "## Final Recommendation". Use only evidence present in the interview questions, interview answer transcripts, and answer metrics for performance judgments. CV, JD, company, and job title may provide context but must not create evidence of interview performance. Return concise markdown in exactly this order: ## Overall Verdict, ## Preparedness Grade, ## Key Strengths, ## Key Weaknesses, then conditionally ## Domain Knowledge Assessment if the interview type includes Technical, conditionally ## Behavioural Assessment if it includes Behavioural, ## Recommended Coach Actions, and ## Final Recommendation. Overall Verdict must contain bullet points, never one summary paragraph. Preparedness Grade must contain exactly one grade from A+ to F and one short sentence explaining the preparedness level and performance-based reason. For Key Strengths and Key Weaknesses, assess each of these six aspects exactly once: Clarity and Structure, Relevance and Depth, Evidence and Examples, Communication, Confidence and Engagement, and Impact and Conclusion. Each aspect must be classified exclusively as either a strength or a weakness. Put an aspect in Key Strengths only when a specific positive performance is directly evidenced in a non-empty answer; otherwise put it in Key Weaknesses only when a specific deficiency is evidenced. Never infer a positive from silence, missing answers, short answers, no hesitations, speaking speed, or the fact that an answer was recorded. If no genuine strengths are evidenced, write only "- None demonstrated." Do not mention Odoo or any other technology in Domain Knowledge Assessment unless that topic was explicitly asked about in an interview question and the candidate gave a substantive answer about it. Domain Knowledge Assessment must use subject or tool bullets with square-bracket proficiency tags and concise evidence comments. Behavioural Assessment must use competency bullets with square-bracket proficiency tags and concise evidence comments. Do not include per-question analysis.'
 const DETAILED_REPORT_USER_MESSAGE =
     'You are an Interview Expert for a Consulting Firm. Using the provided interview context, return markdown with these exact top-level sections in order: 1) Initial Feedback, 2) Overall Rating (out of 10), 3) Answer Strengths, 4) Answer Weaknesses, 5) Future Directions For Improvement, 6) Detailed Per-Question Analysis. In section 6, create one subsection per answer using heading format "### Question N: <question>" and include: Candidate Answer Snapshot, Strengths, Weaknesses, Metric Interpretation, Suggested Improved Answer. The Suggested Improved Answer must describe an ideal answer and tailor it to CV/JD/company/job title context when relevant; if not relevant, explicitly state that no CV/JD tailoring applies. Keep feedback specific, concise, and evidence-based using transcript and metrics.'
 const LLM_PROVIDER_ENV_CONFIG = getLlmProviderConfig(import.meta.env)
@@ -845,6 +881,7 @@ async function downloadInterviewReportPdf({
     companyName,
     consultantFullName,
     jobTitle,
+    interviewType = '(not provided)',
     feedbackText,
     llmProviderLabel,
     llmModel,
@@ -1476,6 +1513,10 @@ async function downloadInterviewReportPdf({
         fontSize: 10,
         spacingAfter: 10,
     })
+    writeTextBlock(`Interview Type: ${sanitizeDisplayText(interviewType, '(not provided)')}`, {
+        fontSize: 10,
+        spacingAfter: 10,
+    })
 
     writeTextBlock(feedbackSectionTitle, {
         fontSize: 14,
@@ -1527,6 +1568,7 @@ function App() {
     const deepgramKeyInputRef = useRef(null)
     const amReportAbortControllerRef = useRef(null)
     const detailedReportAbortControllerRef = useRef(null)
+    const coachReportAbortControllerRef = useRef(null)
     const cancelPendingRecordingStartRef = useRef(false)
 
     const blinkTrackerRef = useRef({
@@ -1659,6 +1701,10 @@ function App() {
     } = useMockInterviewFlow()
     const [cvText, setCvText] = useState(() => getSavedValue(STORAGE_CV_TEXT))
     const [jdText, setJdText] = useState(() => getSavedValue(STORAGE_JD_TEXT))
+    const [priorFeedbackText, setPriorFeedbackText] = useState(() =>
+        getSavedValue(STORAGE_PRIOR_FEEDBACK_TEXT),
+    )
+    const [isImportingFeedbackPdf, setIsImportingFeedbackPdf] = useState(false)
     const [companyNameInput, setCompanyNameInput] = useState(() =>
         getSavedValue(STORAGE_COMPANY_NAME),
     )
@@ -1762,6 +1808,8 @@ function App() {
         setCombinedReportModalOpen,
         amReportMarkdownPreview,
         setAmReportMarkdownPreview,
+        coachReportMarkdownPreview,
+        setCoachReportMarkdownPreview,
         detailedReportMarkdownPreview,
         setDetailedReportMarkdownPreview,
         combinedReportPdfPreviewOpen,
@@ -1772,6 +1820,12 @@ function App() {
         setAmReportPdfBlob,
         amReportPdfFileName,
         setAmReportPdfFileName,
+        coachReportPdfPreviewUrl,
+        setCoachReportPdfPreviewUrl,
+        coachReportPdfBlob,
+        setCoachReportPdfBlob,
+        coachReportPdfFileName,
+        setCoachReportPdfFileName,
         detailedReportPdfPreviewUrl,
         setDetailedReportPdfPreviewUrl,
         detailedReportPdfBlob,
@@ -1871,6 +1925,7 @@ function App() {
     const historyAudioRef = useRef(null)
     const selectedHistoryMediaRef = useRef({ audioUrl: '', videoUrl: '' })
     const interviewerUploadInputRef = useRef(null)
+    const feedbackPdfInputRef = useRef(null)
 
     const hasKey = savedKey.length > 0
     const speechFallbackConfig = useMemo(
@@ -2079,6 +2134,10 @@ function App() {
     useEffect(() => {
         setSavedValue(STORAGE_JD_TEXT, jdText)
     }, [jdText])
+
+    useEffect(() => {
+        setSavedValue(STORAGE_PRIOR_FEEDBACK_TEXT, priorFeedbackText)
+    }, [priorFeedbackText])
 
     useEffect(() => {
         setSavedValue(STORAGE_COMPANY_NAME, companyNameInput)
@@ -2631,6 +2690,39 @@ function App() {
         setToast('Custom interviewer image removed.')
     }
 
+    async function handleFeedbackPdfImport(event) {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        if (!file) return
+
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+        if (!isPdf) {
+            setToast('Select a valid PDF file.')
+            return
+        }
+
+        setIsImportingFeedbackPdf(true)
+        try {
+            const extractedText = await extractTextFromPdfFile(file)
+            if (!extractedText.trim()) {
+                setToast('Could not find any text in this PDF.')
+                return
+            }
+
+            setPriorFeedbackText(extractedText)
+            setToast('Feedback PDF imported.')
+        } catch {
+            setToast('Could not read this PDF file.')
+        } finally {
+            setIsImportingFeedbackPdf(false)
+        }
+    }
+
+    function clearPriorFeedbackText() {
+        setPriorFeedbackText('')
+        setToast('Prior feedback cleared.')
+    }
+
     // Keep dependencies minimal here; closeSettings is intentionally excluded to avoid escape-handler churn.
     useEffect(() => {
         let cancelled = false
@@ -2875,6 +2967,8 @@ function App() {
         generateQuestionsCountModalOpen,
         generateQuestionsCountInput,
         setGenerateQuestionsCountInput,
+        selectedQuestionTypes,
+        setQuestionTypeSelected,
         confirmGenerateQuestionsClearSummary,
         cancelGenerateQuestionsClearSummary,
         confirmGenerateQuestionsCountSelection,
@@ -2930,21 +3024,6 @@ function App() {
         ]
 
         return sections.join('\n')
-    }
-
-    async function copyCvJdForGemini() {
-        const outputMarkdown = buildCvJdForGeminiMarkdown()
-        if (!outputMarkdown) {
-            setToast('Add CV, JD, or company name before copying.')
-            return
-        }
-
-        try {
-            await navigator.clipboard.writeText(outputMarkdown)
-            setToast('CV, JD, and company name copied for Gemini.')
-        } catch {
-            setToast('Could not copy CV/JD content.')
-        }
     }
 
     function parseGeneratedQuestions(rawText) {
@@ -3048,6 +3127,16 @@ function App() {
                     : `### Question ${questionNumber}:`
             },
         )
+    }
+
+    function normalizeCoachReportMarkdown(markdownText) {
+        const normalizedMarkdown = String(markdownText || '').replace(/\r\n?/g, '\n').trim()
+        const reportStartMatch = normalizedMarkdown.match(/^#{2,6}\s+Overall Verdict\b/im)
+        if (!reportStartMatch || reportStartMatch.index == null) {
+            return normalizedMarkdown
+        }
+
+        return normalizedMarkdown.slice(reportStartMatch.index).trim()
     }
 
     function normalizeDetailedReportMarkdownForPdf(detailedMarkdown, summaries) {
@@ -3265,6 +3354,11 @@ function App() {
             openQuestionsDrawer = true,
             runInBackground = false,
             questionCount = DEFAULT_GENERATED_QUESTION_COUNT,
+            questionTypes = {
+                behavioural: true,
+                technical: true,
+                situational: true,
+            },
         } = options
         if (isGeneratingQuestions) return
 
@@ -3275,6 +3369,7 @@ function App() {
         const shouldOpenQuestionsDrawer =
             openQuestionsDrawer && cameraWorkflowMode === CAMERA_WORKFLOW_MODE_PRACTICE
         const jdOnlyQuestionCount = Math.floor(0.4 * normalizedQuestionCount)
+        const questionTypePromptInstruction = buildQuestionTypePromptInstruction(questionTypes)
         setRequestedQuestionGenerationCount(normalizedQuestionCount)
         setGeneratedQuestionProgressCount(0)
 
@@ -3282,9 +3377,10 @@ function App() {
         const jobDescription = jdText.trim()
         const companyName = companyNameInput.trim()
         const jobTitle = jobTitleInput.trim()
+        const priorFeedback = priorFeedbackText.trim()
 
-        if (!cv && !jobDescription && !companyName && !jobTitle) {
-            setToast('Add CV, JD, company name, or job title before generating questions.')
+        if (!cv && !jobDescription && !companyName && !jobTitle && !priorFeedback) {
+            setToast('Add CV, JD, company name, job title, or prior feedback before generating questions.')
             return
         }
 
@@ -3353,13 +3449,23 @@ function App() {
                         },
                         context: {
                             question: 'Generate interview questions from profile context.',
-                            answer: 'Use the provided CV/JD/company fields only.',
-                            generationGuidelines: `${DEFAULT_QUESTION_GENERATION_GUIDELINES} If JD is present, include some JD-only questions that are not CV-derived.`,
+                            answer: 'Use the provided CV/JD/company/prior feedback fields only.',
+                            generationGuidelines: [
+                                DEFAULT_QUESTION_GENERATION_GUIDELINES,
+                                questionTypePromptInstruction,
+                                'If JD is present, include some JD-only questions that are not CV-derived.',
+                                priorFeedback
+                                    ? 'Prior interview feedback is provided below. Prioritize questions that let the candidate practice and address the weaknesses and recommended coach actions called out in that feedback.'
+                                    : '',
+                            ]
+                                .filter(Boolean)
+                                .join(' '),
                             metricSummary: 'n/a',
                             companyName,
                             jobTitle,
                             cv,
                             jobDescription,
+                            priorFeedback,
                         },
                     })
                     break
@@ -3422,6 +3528,8 @@ function App() {
             return
         }
 
+        const interviewType = buildInterviewTypeLabel(selectedQuestionTypes)
+
         const summaryMarkdown = buildAnswerSummaryMarkdown(
             interviewSummaries,
             overallInterviewSummary,
@@ -3439,6 +3547,9 @@ function App() {
         setAmReportPdfPreviewUrl('')
         setAmReportPdfBlob(null)
         setAmReportPdfFileName('')
+        setCoachReportPdfPreviewUrl('')
+        setCoachReportPdfBlob(null)
+        setCoachReportPdfFileName('')
         setDetailedReportPdfPreviewUrl('')
         setDetailedReportPdfBlob(null)
         setDetailedReportPdfFileName('')
@@ -3447,6 +3558,7 @@ function App() {
         setCombinedReportModalOpen(true)
         setCombinedReportPdfPreviewOpen(false)
         setAmReportMarkdownPreview('Waiting for detailed report...')
+        setCoachReportMarkdownPreview('Waiting for AM report...')
         setDetailedReportMarkdownPreview('Generating detailed report...')
         setConfirmCloseCombinedReportPdfOpen(false)
         setToast('Generating detailed report first, then AM report...')
@@ -3485,11 +3597,12 @@ function App() {
                             context: {
                                 question: 'Generate a detailed mock interview report with both overall summary and per-question analysis.',
                                 answer: summaryMarkdown,
-                                generationGuidelines: DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES,
+                                generationGuidelines: `${DEFAULT_DETAILED_REPORT_GENERATION_GUIDELINES} Interview type: ${interviewType}.`,
                                 metricSummary,
                                 companyName,
                                 consultantFullName,
                                 jobTitle,
+                                interviewType,
                                 jobDescription,
                                 cv,
                             },
@@ -3528,6 +3641,7 @@ function App() {
                     companyName,
                     consultantFullName,
                     jobTitle,
+                    interviewType,
                     feedbackText: normalizedDetailedPdfMarkdown,
                     llmProviderLabel: usedProviderLabel,
                     llmModel: usedModel,
@@ -3580,11 +3694,12 @@ function App() {
                             context: {
                                 question: 'Generate concise mock interview feedback and summary for the consultant at consulting firm. Do not include per question feedback. Ensure consistency with the detailed report provided in context.',
                                 answer: `${summaryMarkdown}\n\nDetailed report for alignment:\n${detailedReportText}`,
-                                generationGuidelines: `${DEFAULT_AM_REPORT_GENERATION_GUIDELINES}\n\nUse the detailed report context to keep conclusions, strengths, risks, and recommendations consistent across both outputs.`,
+                                generationGuidelines: `${DEFAULT_AM_REPORT_GENERATION_GUIDELINES}\n\nInterview type: ${interviewType}. Use the detailed report context to keep conclusions, strengths, risks, and recommendations consistent across both outputs.`,
                                 metricSummary,
                                 companyName,
                                 consultantFullName,
                                 jobTitle,
+                                interviewType,
                                 jobDescription,
                                 cv,
                             },
@@ -3614,6 +3729,7 @@ function App() {
                     companyName,
                     consultantFullName,
                     jobTitle,
+                    interviewType,
                     feedbackText: result.text,
                     llmProviderLabel: usedProviderLabel,
                     llmModel: usedModel,
@@ -3629,6 +3745,96 @@ function App() {
                 return { text: result.text, pdfDocument }
             } finally {
                 amReportAbortControllerRef.current = null
+            }
+        }
+
+        const generateCoachTask = async (detailedReportText) => {
+            let result = null
+            let lastError = null
+            let usedProviderLabel = ''
+            let usedModel = ''
+            const controller = new AbortController()
+            coachReportAbortControllerRef.current = controller
+
+            try {
+                for (let index = 0; index < providerCandidates.length; index += 1) {
+                    const providerConfig = providerCandidates[index]
+                    setCoachReportMarkdownPreview('')
+
+                    if (controller.signal.aborted) {
+                        const abortError = new Error('Coach report generation canceled.')
+                        abortError.code = 'request-aborted'
+                        throw abortError
+                    }
+
+                    const providerLabel = getLlmProviderUsageLabel(providerConfig.providerId)
+                    const resolvedModel = resolveReportProviderModel(providerConfig, 'coach')
+
+                    try {
+                        result = await sendInterviewChatMessage({
+                            providerId: providerConfig.providerId,
+                            apiKey: providerConfig.apiKey,
+                            model: resolvedModel,
+                            baseUrl: providerConfig.baseUrl,
+                            userMessage: COACH_REPORT_USER_MESSAGE,
+                            context: {
+                                question: 'Generate a standalone coach report for the completed mock interview.',
+                                answer: `${summaryMarkdown}\n\nDetailed report for evidence:\n${detailedReportText}`,
+                                generationGuidelines: `Interview type: ${interviewType}. Include Domain Knowledge Assessment only when Technical is selected, and use only technical topics explicitly asked and substantively answered in the interview. Include Behavioural Assessment only when Behavioural is selected. Return final markdown only; do not expose reasoning or repeat the instructions.`,
+                                metricSummary,
+                                companyName,
+                                consultantFullName,
+                                jobTitle,
+                                interviewType,
+                                questionTypes: selectedQuestionTypes,
+                                jobDescription,
+                                cv,
+                            },
+                            stream: true,
+                            onChunk: (fullText) => {
+                                setCoachReportMarkdownPreview(
+                                    normalizeCoachReportMarkdown(fullText || ''),
+                                )
+                            },
+                            signal: controller.signal,
+                        })
+                        usedProviderLabel = providerLabel
+                        usedModel = resolvedModel
+                        break
+                    } catch (error) {
+                        if (error?.code === 'request-aborted') {
+                            throw error
+                        }
+                        showLlmProviderHttpErrorToast(error, providerConfig.providerId)
+                        lastError = error
+                    }
+                }
+
+                if (!result?.text) {
+                    throw lastError || new Error('Could not generate coach report.')
+                }
+
+                const normalizedCoachText = normalizeCoachReportMarkdown(result.text)
+                const coachPdfDocument = await downloadInterviewReportPdf({
+                    companyName,
+                    consultantFullName,
+                    jobTitle,
+                    interviewType,
+                    feedbackText: normalizedCoachText,
+                    llmProviderLabel: usedProviderLabel,
+                    llmModel: usedModel,
+                    reportTitle: 'Coach Interview Feedback Report',
+                    feedbackSectionTitle: 'Coach Feedback Output',
+                    fileNamePrefix: 'coach-report',
+                })
+
+                if (!coachPdfDocument?.blob) {
+                    throw new Error('Could not prepare coach report PDF.')
+                }
+
+                return { text: normalizedCoachText, pdfDocument: coachPdfDocument }
+            } finally {
+                coachReportAbortControllerRef.current = null
             }
         }
 
@@ -3648,11 +3854,19 @@ function App() {
             setAmReportMarkdownPreview('Generating AM report from detailed report...')
 
             const amResult = await generateAmTask(detailedResult.text)
+            setCoachReportMarkdownPreview(amResult.text)
             const amPreviewUrl = URL.createObjectURL(amResult.pdfDocument.blob)
             setAmReportPdfPreviewUrl(amPreviewUrl)
             setAmReportPdfBlob(amResult.pdfDocument.blob)
             setAmReportPdfFileName(amResult.pdfDocument.fileName || 'am-feedback-report.pdf')
             hasAmPdf = true
+
+            setCoachReportMarkdownPreview('Generating standalone coach report...')
+            const coachResult = await generateCoachTask(detailedResult.text)
+            const coachPreviewUrl = URL.createObjectURL(coachResult.pdfDocument.blob)
+            setCoachReportPdfPreviewUrl(coachPreviewUrl)
+            setCoachReportPdfBlob(coachResult.pdfDocument.blob)
+            setCoachReportPdfFileName(coachResult.pdfDocument.fileName || 'coach-report.pdf')
 
             downloadBlob(
                 detailedResult.pdfDocument.blob,
@@ -3662,10 +3876,14 @@ function App() {
                 amResult.pdfDocument.blob,
                 amResult.pdfDocument.fileName || 'am-feedback-report.pdf',
             )
+            downloadBlob(
+                coachResult.pdfDocument.blob,
+                coachResult.pdfDocument.fileName || 'coach-report.pdf',
+            )
 
             setCombinedReportModalOpen(false)
             setCombinedReportPdfPreviewOpen(true)
-            setToast('Detailed and AM PDFs downloaded.')
+            setToast('Detailed, AM, and Coach PDFs downloaded.')
         } catch (error) {
             setCombinedReportModalOpen(false)
 
@@ -3705,6 +3923,10 @@ function App() {
     function cancelCombinedReportGeneration() {
         cancelAmReportGeneration()
         cancelDetailedReportGeneration()
+        const controller = coachReportAbortControllerRef.current
+        if (controller) {
+            controller.abort()
+        }
     }
 
     function downloadCurrentAmReportPdf() {
@@ -3727,6 +3949,16 @@ function App() {
         setToast('Detailed report PDF downloaded.')
     }
 
+    function downloadCurrentCoachReportPdf() {
+        if (!coachReportPdfBlob) {
+            setToast('No coach report PDF is available to download.')
+            return
+        }
+
+        downloadBlob(coachReportPdfBlob, coachReportPdfFileName || 'coach-report.pdf')
+        setToast('Coach report PDF downloaded.')
+    }
+
     function requestCloseCombinedReportPdfPreview() {
         setConfirmCloseCombinedReportPdfOpen(true)
     }
@@ -3737,9 +3969,15 @@ function App() {
         setAmReportPdfBlob(null)
         setAmReportPdfFileName('')
         setAmReportPdfPreviewUrl('')
+        setCoachReportPdfBlob(null)
+        setCoachReportPdfFileName('')
+        setCoachReportPdfPreviewUrl('')
         setDetailedReportPdfBlob(null)
         setDetailedReportPdfFileName('')
         setDetailedReportPdfPreviewUrl('')
+        setAmReportMarkdownPreview('')
+        setCoachReportMarkdownPreview('')
+        setDetailedReportMarkdownPreview('')
     }
 
     function importQuestion(questionText, options = {}) {
@@ -3842,6 +4080,37 @@ function App() {
         }
     }
 
+    async function ensureCameraPermissionForMockInterviewStart() {
+        if (isCameraAccessAllowed) return true
+
+        if (!navigator?.mediaDevices?.getUserMedia) {
+            setToast('Camera access is unavailable in this browser.')
+            return true
+        }
+
+        setEnableCamera(true)
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                },
+                audio: false,
+            })
+
+            for (const track of stream.getTracks()) {
+                track.stop()
+            }
+
+            setHasCameraAccess(true)
+            void startCamera()
+            return true
+        } catch {
+            setToast('Allow camera access to enable video during mock interview.')
+            return true
+        }
+    }
+
     async function startMockInterviewQuestionAt(index, options = {}) {
         const questions = options.questions || parsedDrawerQuestions
         const question = questions[index]
@@ -3897,6 +4166,10 @@ function App() {
         if (startIndex < 0) {
             setToast('Generate questions first.')
             return
+        }
+
+        if (!isCameraAccessAllowed) {
+            void ensureCameraPermissionForMockInterviewStart()
         }
 
         const hasMicrophonePermission = await ensureMicrophonePermissionForMockInterviewStart()
@@ -7957,21 +8230,17 @@ function App() {
                                 <button
                                     type="button"
                                     className="btn ghost"
-                                    onClick={copyCvJdForGemini}
-                                >
-                                    Copy
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn ghost"
                                     onClick={() => {
                                         requestGenerateQuestionsFromQuestionsModal({ closeCvJd: true })
                                     }}
-                                    disabled={isGeneratingQuestions || (!cvText.trim() && !jdText.trim())}
+                                    disabled={
+                                        isGeneratingQuestions ||
+                                        (!cvText.trim() && !jdText.trim() && !priorFeedbackText.trim())
+                                    }
                                     title={
-                                        !cvText.trim() && !jdText.trim()
-                                            ? 'Add CV or JD details first.'
-                                            : 'Generates questions based on CV/JD/Company Name'
+                                        !cvText.trim() && !jdText.trim() && !priorFeedbackText.trim()
+                                            ? 'Add CV, JD, or prior feedback details first.'
+                                            : 'Generates questions based on CV/JD/Company Name/Prior Feedback'
                                     }
                                 >
                                     {isGeneratingQuestions ? 'Generating...' : 'Generate Questions'}
@@ -8056,6 +8325,49 @@ function App() {
                                     placeholder="Paste your CV here"
                                     disabled={isCvJdModalEditLocked}
                                 />
+
+                                <div className="cvjd-label-row">
+                                    <label htmlFor="cvjd-prior-feedback" className="label cvjd-label">
+                                        Prior Feedback (optional)
+                                    </label>
+                                    <div className="cvjd-prior-feedback-actions">
+                                        <button
+                                            type="button"
+                                            className="btn ghost"
+                                            onClick={() => feedbackPdfInputRef.current?.click()}
+                                            disabled={isCvJdModalEditLocked || isImportingFeedbackPdf}
+                                            title="Import a previously downloaded feedback report PDF"
+                                        >
+                                            {isImportingFeedbackPdf ? 'Importing...' : 'Import Feedback PDF'}
+                                        </button>
+                                        {Boolean(priorFeedbackText.trim()) && (
+                                            <button
+                                                type="button"
+                                                className="btn ghost"
+                                                onClick={clearPriorFeedbackText}
+                                                disabled={isCvJdModalEditLocked}
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                        <input
+                                            ref={feedbackPdfInputRef}
+                                            type="file"
+                                            accept="application/pdf,.pdf"
+                                            className="sr-only"
+                                            onChange={handleFeedbackPdfImport}
+                                        />
+                                    </div>
+                                </div>
+                                <textarea
+                                    id="cvjd-prior-feedback"
+                                    className="field cvjd-textarea"
+                                    value={priorFeedbackText}
+                                    onChange={(event) => setPriorFeedbackText(event.target.value)}
+                                    rows={12}
+                                    placeholder="Import a prior feedback report PDF, or paste feedback text here. New questions will target the weaknesses it identifies."
+                                    disabled={isCvJdModalEditLocked}
+                                />
                             </div>
                         </div>
                     </div>
@@ -8087,7 +8399,7 @@ function App() {
                                     type="button"
                                     className="btn ghost"
                                     onClick={clearQuestionsList}
-                                    disabled={!parsedDrawerQuestions.length}
+                                    disabled={isGeneratingQuestions || !parsedDrawerQuestions.length}
                                 >
                                     Clear Questions List
                                 </button>
@@ -8125,6 +8437,7 @@ function App() {
                                     onChange={(event) =>
                                         handleQuestionsBulkInputChange(event.target.value)
                                     }
+                                    disabled={isGeneratingQuestions}
                                     rows={6}
                                     placeholder={[
                                         'Tell me about a challenging project you worked on.',
@@ -8176,6 +8489,7 @@ function App() {
                                                                 onClick={() => {
                                                                     removeParsedQuestionAt(index)
                                                                 }}
+                                                                disabled={isGeneratingQuestions}
                                                                 aria-label={`Delete question ${index + 1}`}
                                                                 title="Delete question"
                                                             >
@@ -8817,11 +9131,21 @@ function App() {
                         </div>
                         <div className="question-modal-body am-report-stream-body">
                             <div className="combined-report-stream-grid" aria-live="polite">
-                                <div className="combined-report-stream-panel">
-                                    <h3>AM Report</h3>
-                                    <div className="question-modal-inner am-report-stream-inner" ref={amReportPreviewScrollRef}>
-                                        <div className="am-report-stream-content no-select">
-                                            <ReactMarkdown>{amReportMarkdownPreview || 'Generating AM report...'}</ReactMarkdown>
+                                <div className="combined-report-stream-column-left">
+                                    <div className="combined-report-stream-panel">
+                                        <h3>AM Report</h3>
+                                        <div className="question-modal-inner am-report-stream-inner" ref={amReportPreviewScrollRef}>
+                                            <div className="am-report-stream-content no-select">
+                                                <ReactMarkdown>{amReportMarkdownPreview || 'Generating AM report...'}</ReactMarkdown>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="combined-report-stream-panel">
+                                        <h3>Coach Report</h3>
+                                        <div className="question-modal-inner am-report-stream-inner">
+                                            <div className="am-report-stream-content no-select">
+                                                <ReactMarkdown>{coachReportMarkdownPreview || 'Generating coach report...'}</ReactMarkdown>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -8879,34 +9203,64 @@ function App() {
                             </div>
                         </div>
                         <div className="combined-report-pdf-body">
-                            <section className="combined-report-pdf-panel">
-                                <div className="combined-report-pdf-panel-header">
-                                    <h3>AM Report PDF</h3>
-                                    <button
-                                        type="button"
-                                        className="btn ghost icon-only-btn"
-                                        onClick={downloadCurrentAmReportPdf}
-                                        aria-label="Download AM PDF"
-                                        title="Download AM PDF"
-                                        disabled={!amReportPdfBlob}
-                                    >
-                                        <span className="material-symbols-outlined" aria-hidden="true">
-                                            download
-                                        </span>
-                                    </button>
-                                </div>
-                                <div className="am-report-pdf-body">
-                                    {amReportPdfPreviewUrl ? (
-                                        <iframe
-                                            title="AM Feedback PDF Preview"
-                                            src={amReportPdfPreviewUrl}
-                                            className="am-report-pdf-iframe"
-                                        />
-                                    ) : (
-                                        <p className="muted combined-report-pdf-empty">AM PDF not available.</p>
-                                    )}
-                                </div>
-                            </section>
+                            <div className="combined-report-pdf-left-column">
+                                <section className="combined-report-pdf-panel">
+                                    <div className="combined-report-pdf-panel-header">
+                                        <h3>AM Report PDF</h3>
+                                        <button
+                                            type="button"
+                                            className="btn ghost icon-only-btn"
+                                            onClick={downloadCurrentAmReportPdf}
+                                            aria-label="Download AM PDF"
+                                            title="Download AM PDF"
+                                            disabled={!amReportPdfBlob}
+                                        >
+                                            <span className="material-symbols-outlined" aria-hidden="true">
+                                                download
+                                            </span>
+                                        </button>
+                                    </div>
+                                    <div className="am-report-pdf-body">
+                                        {amReportPdfPreviewUrl ? (
+                                            <iframe
+                                                title="AM Feedback PDF Preview"
+                                                src={amReportPdfPreviewUrl}
+                                                className="am-report-pdf-iframe"
+                                            />
+                                        ) : (
+                                            <p className="muted combined-report-pdf-empty">AM PDF not available.</p>
+                                        )}
+                                    </div>
+                                </section>
+                                <section className="combined-report-pdf-panel">
+                                    <div className="combined-report-pdf-panel-header">
+                                        <h3>Coach Report PDF</h3>
+                                        <button
+                                            type="button"
+                                            className="btn ghost icon-only-btn"
+                                            onClick={downloadCurrentCoachReportPdf}
+                                            aria-label="Download Coach PDF"
+                                            title="Download Coach PDF"
+                                            disabled={!coachReportPdfBlob}
+                                        >
+                                            <span className="material-symbols-outlined" aria-hidden="true">
+                                                download
+                                            </span>
+                                        </button>
+                                    </div>
+                                    <div className="am-report-pdf-body">
+                                        {coachReportPdfPreviewUrl ? (
+                                            <iframe
+                                                title="Coach Report PDF Preview"
+                                                src={coachReportPdfPreviewUrl}
+                                                className="am-report-pdf-iframe"
+                                            />
+                                        ) : (
+                                            <p className="muted combined-report-pdf-empty">Coach PDF not available.</p>
+                                        )}
+                                    </div>
+                                </section>
+                            </div>
                             <section className="combined-report-pdf-panel">
                                 <div className="combined-report-pdf-panel-header">
                                     <h3>Detailed Report PDF</h3>
@@ -9011,6 +9365,8 @@ function App() {
                 isOpen={generateQuestionsCountModalOpen}
                 value={generateQuestionsCountInput}
                 onValueChange={setGenerateQuestionsCountInput}
+                questionTypes={selectedQuestionTypes}
+                onQuestionTypeChange={setQuestionTypeSelected}
                 onConfirm={confirmGenerateQuestionsCountSelection}
                 onClose={closeGenerateQuestionsCountModal}
                 min={cameraWorkflowMode === CAMERA_WORKFLOW_MODE_MOCK_INTERVIEW ? 6 : 2}
