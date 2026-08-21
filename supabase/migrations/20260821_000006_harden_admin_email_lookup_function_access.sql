@@ -1,5 +1,5 @@
--- Admin helper function to resolve auth user_id from email for dashboard filtering.
--- Only allowlisted admins can execute a successful lookup.
+-- Security hardening: restrict admin email lookup function to authenticated callers.
+-- Keep SECURITY DEFINER because this function needs privileged read access to auth.users.
 
 create or replace function public.admin_lookup_user_id_by_email(p_email text)
 returns uuid

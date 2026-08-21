@@ -23,7 +23,7 @@ create or replace function public.is_admin_allowlisted()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
     select exists (
@@ -35,6 +35,7 @@ as $$
 $$;
 
 revoke all on function public.is_admin_allowlisted() from public;
+revoke execute on function public.is_admin_allowlisted() from anon;
 grant execute on function public.is_admin_allowlisted() to authenticated;
 
 -- Allow authenticated users to validate only their own allowlist record.

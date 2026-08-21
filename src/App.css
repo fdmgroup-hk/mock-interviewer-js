@@ -2863,10 +2863,13 @@ a.btn {
 .cvjd-modal-body {
     min-height: 0;
     overflow: visible;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
 }
 
 .cvjd-layout {
     min-height: 0;
+    height: 100%;
     display: block;
     position: relative;
     align-items: start;
@@ -2874,8 +2877,8 @@ a.btn {
 
 .cvjd-toc {
     position: absolute;
-    left: calc(-210px - 0.9rem - 10px);
-    top: calc(0.2rem - 2px);
+    left: calc(-210px - 0.9rem - 2px);
+    top: 0.2rem;
     width: 210px;
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -2930,11 +2933,15 @@ a.btn {
     border: none;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
     gap: 0.55rem;
     align-content: start;
-    padding: 0.1rem calc(0.2rem + 10px) 0.45rem;
-    max-height: min(72vh, calc(100vh - 12rem));
+    min-height: 0;
+    height: 100%;
+    padding: 0.1rem 6px 0.45rem;
+    max-height: 100%;
     overflow: auto;
+    scrollbar-gutter: stable;
 }
 
 .cvjd-section {
@@ -2992,6 +2999,11 @@ a.btn {
     .cvjd-toc {
         position: static;
         width: auto;
+    }
+
+    .cvjd-modal-inner {
+        max-height: none;
+        overflow: visible;
     }
 
     .cvjd-toc-list {
